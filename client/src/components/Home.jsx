@@ -1,134 +1,124 @@
-import React from 'react';
-import { Card, CardContent, CardMedia, Typography, Box, Stack } from '@mui/material';
-import { Person, CalendarToday, Schedule, MeetingRoom } from '@mui/icons-material';
+import React, { useEffect, useState } from 'react';
+import {
+  Card,
+  CardContent,
+  CardMedia,
+  Typography,
+  Box,
+  Stack,
+} from '@mui/material';
+import {
+  Person,
+  CalendarToday,
+  Schedule,
+  MeetingRoom,
+} from '@mui/icons-material';
 
 export default function Home() {
-  const userName = 'Enitha'; // Example: you can fetch this dynamically
-  const meetings = [
-    {
-      id: 1,
-      title: 'Review Meeting',
-      dept: 'Students Affairs',
-      host: 'Enitha J R',
-      date: '19/10/2024',
-      venue: 'Aero Seminar Hall',
-      time: '10:00 AM',
-      followup: true,
-      img: '/meeting1.png',
-    },
-    {
-      id: 2,
-      title: 'Planning Meeting',
-      dept: 'Admin',
-      host: 'Enitha J R',
-      date: '20/10/2024',
-      venue: 'Main Conference Room',
-      time: '2:00 PM',
-      followup: false,
-      img: '/meeting2.png',
-    },
-    {
-      id: 3,
-      title: 'Review Meeting',
-      dept: 'Students Affairs',
-      host: 'Enitha J R',
-      date: '19/10/2024',
-      venue: 'Aero Seminar Hall',
-      time: '10:00 AM',
-      followup: true,
-      img: '/meeting1.png',
-    },
-    {
-      id: 4,
-      title: 'Planning Meeting',
-      dept: 'Admin',
-      host: 'Enitha J R',
-      date: '20/10/2024',
-      venue: 'Main Conference Room',
-      time: '2:00 PM',
-      followup: false,
-      img: '/meeting2.png',
-    },
-  ];
+  const [meetings, setMeetings] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const userName = localStorage.getItem('firstName') || 'User';
+
+  useEffect(() => {
+    const fetchMeetings = async () => {
+      const token = localStorage.getItem('token');
+
+      if (!token) {
+        window.location.href = '/login';
+        return;
+      }
+
+      try {
+        const res = await fetch('http://localhost:5000/api/meetings', {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (res.status === 401) {
+          localStorage.clear();
+          window.location.href = '/login';
+          return;
+        }
+
+        const data = await res.json();
+        setMeetings(data);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchMeetings();
+  }, []);
+
+  const formatDate = (dt) =>
+    new Date(dt).toLocaleDateString();
+
+  const formatTime = (dt) =>
+    new Date(dt).toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
 
   return (
-    <Box sx={{
-      pl: { xs: 3, md: 11 }, // xs = mobile, md = desktop/laptop
-      pt: 3,
-    }}>
-      {/* Welcome Message */}
-      <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 3, color: 'text.primary' }}>
+    <Box sx={{ pl: { xs: 3, md: 11 }, pt: 3 }}>
+      <Typography variant="h5" fontWeight="bold" mb={3}>
         Welcome, {userName} !
       </Typography>
 
-      {/* Meetings Cards */}
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-        {meetings.length > 0 ? (
+        {loading ? (
+          <Typography>Loading meetings...</Typography>
+        ) : meetings.length > 0 ? (
           meetings.map((meeting) => (
-            <Card
-              key={meeting.id}
-              sx={{
-                width: 280,
-                borderRadius: 3,
-                boxShadow: 3,
-                cursor: 'pointer',
-                position: 'relative',
-              }}
-            >
-              {/* Follow-up badge */}
-              {meeting.followup && (
+            <Card key={meeting._id} sx={{ width: 280 }}>
+              {meeting.meeting_followup && (
                 <Box sx={{ position: 'absolute', top: 8, right: 8 }}>
-                  <Typography variant="subtitle2" color="primary" sx={{ fontWeight: 'bold' }}>
-                    F
-                  </Typography>
+                  <Typography color="primary">F</Typography>
                 </Box>
               )}
 
-              {/* Image */}
               <CardMedia
                 component="img"
                 height="120"
-                // image={meeting.img}
                 image="./meeting.png"
-                alt={meeting.title}
               />
 
               <CardContent>
-                {/* Title & Dept */}
-                <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'text.primary' }}>
-                  {meeting.title}
-                </Typography>
-                <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
-                  By {meeting.dept}
+                <Typography variant="h6" fontWeight="bold">
+                  {meeting.meeting_name}
                 </Typography>
 
-                {/* Details */}
+                <Typography variant="body2" mb={1}>
+                  By {meeting.meeting_host_by}
+                </Typography>
+
                 <Stack spacing={1}>
-                  {/* Host */}
-                  <Stack direction="row" alignItems="center" spacing={1}>
-                    <Person fontSize="small" sx={{ color: 'text.secondary' }} />
-                    <Typography variant="body2" sx={{ color: 'text.primary' }}>
-                      {meeting.host}
+                  <Stack direction="row" spacing={1}>
+                    <Person fontSize="small" />
+                    <Typography variant="body2">
+                      {meeting.meeting_host_name}
                     </Typography>
                   </Stack>
 
-                  {/* Date & Time */}
-                  <Stack direction="row" alignItems="center" spacing={1}>
-                    <CalendarToday fontSize="small" sx={{ color: 'text.secondary' }} />
-                    <Typography variant="body2" sx={{ color: 'text.primary' }}>
-                      {meeting.date}
+                  <Stack direction="row" spacing={1}>
+                    <CalendarToday fontSize="small" />
+                    <Typography variant="body2">
+                      {formatDate(meeting.meeting_datetime)}
                     </Typography>
-                    <Schedule fontSize="small" sx={{ color: 'text.secondary', ml: 1 }} />
-                    <Typography variant="body2" sx={{ color: 'text.primary' }}>
-                      {meeting.time}
+                    <Schedule fontSize="small" />
+                    <Typography variant="body2">
+                      {formatTime(meeting.meeting_datetime)}
                     </Typography>
                   </Stack>
 
-                  {/* Venue */}
-                  <Stack direction="row" alignItems="center" spacing={1}>
-                    <MeetingRoom fontSize="small" sx={{ color: 'text.secondary' }} />
-                    <Typography variant="body2" sx={{ color: 'text.primary' }}>
-                      {meeting.venue}
+                  <Stack direction="row" spacing={1}>
+                    <MeetingRoom fontSize="small" />
+                    <Typography variant="body2">
+                      {meeting.meeting_venue}
                     </Typography>
                   </Stack>
                 </Stack>
@@ -136,7 +126,7 @@ export default function Home() {
             </Card>
           ))
         ) : (
-          <Typography>No My meetings!</Typography>
+          <Typography>No meetings found!</Typography>
         )}
       </Box>
     </Box>

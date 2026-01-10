@@ -1,107 +1,201 @@
 import React from 'react';
-import { Drawer, List, ListItem, ListItemIcon, ListItemText, IconButton, Tooltip } from '@mui/material';
-import AssignmentIcon from '@mui/icons-material/Assignment';
-import { Home, Logout, Menu } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
-import { Divider } from '@mui/material'
-import { CalendarToday } from '@mui/icons-material';
+import { Link, useNavigate } from 'react-router-dom';
+import { styled, useTheme } from '@mui/material/styles';
+import {
+  Drawer,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  IconButton,
+  Divider,
+  Tooltip,
+  Box,
+  Typography,
+} from '@mui/material';
+
+import {
+  Home,
+  Logout,
+  Assignment,
+  CalendarToday,
+  ChevronLeft,
+  ChevronRight,
+} from '@mui/icons-material';
+
+import {jwtDecode} from 'jwt-decode';
+
+const drawerWidth = 300;
+
+const DrawerHeader = styled('div')(({ theme }) => ({
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  padding: theme.spacing(0, 2),
+  ...theme.mixins.toolbar,
+}));
 
 export default function Sidebar({ open, setOpen }) {
+  const theme = useTheme();
   const navigate = useNavigate();
 
+  const [name, setName] = React.useState('User');
+  const [email, setEmail] = React.useState('');
+
+  React.useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    try {
+      const decoded = jwtDecode(token);
+      setName(decoded.name || decoded.userName || 'User');
+      setEmail(decoded.email || decoded.userEmail || '');
+    } catch (error) {
+      console.error('Failed to decode token:', error);
+      localStorage.removeItem('token');
+      navigate('/login');
+    }
+  }, [navigate]);
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    navigate('/login');
+  };
+
   return (
-    <Drawer
-        variant="permanent"
+    <Box sx={{ display: 'flex' }}>
+      {/* Toggle button visible even when drawer is closed */}
+      {!open && (
+        <IconButton
+          onClick={() => setOpen(true)}
+          sx={{
+            position: 'fixed',
+            top: 16,
+            left: 10,
+            zIndex: theme.zIndex.drawer + 1,
+            // bgcolor: 'background.paper',
+            // border: '1px solid',
+          }}
+        >
+          <ChevronRight />
+        </IconButton>
+      )}
+
+      <Drawer
+        variant="persistent"
+        anchor="left"
         open={open}
         sx={{
-            width: open ? 300 : 60,
-            flexShrink: 0,
-            '& .MuiDrawer-paper': {
-            width: open ? 300 : 60,
+          width: drawerWidth,
+          flexShrink: 0,
+          '& .MuiDrawer-paper': {
+            width: drawerWidth,
             boxSizing: 'border-box',
-            display: 'flex',
-            flexDirection: 'column',
-            height: '100vh',        // full viewport height
-            overflow: 'hidden',     // hide scroll
-            },
+          },
         }}
-    >
+      >
+        <DrawerHeader>
+          <Box>
+            <Typography variant="subtitle1">Welcome, {name}!</Typography>
+            <Typography variant="body2" color="text.secondary">
+              {email || 'No email available'}
+            </Typography>
+          </Box>
 
-      {/* Hamburger Menu at Top Right */}
-      <div style={{ display: 'flex', justifyContent: open ? 'flex-end' : 'center', padding: 8 }}>
-        <IconButton onClick={() => setOpen(!open)}>
-          <Menu />
-        </IconButton>
-      </div>
+          <IconButton onClick={() => setOpen(false)}>
+            <ChevronLeft />
+          </IconButton>
+        </DrawerHeader>
 
-      {/* Sidebar Items */}
-      <List>
-        <ListItem button onClick={() => navigate('/')}>
-          <Tooltip title="Home" placement="right" disableHoverListener={open}>
-            <ListItemIcon>
-              <Home />
-            </ListItemIcon>
-          </Tooltip>
-          {open && <ListItemText primary="Home" />}
-        </ListItem>
+        <Divider />
 
-        <ListItem button onClick={() => navigate('/tasks')}>
-          <Tooltip title="Tasks" placement="right" disableHoverListener={open}>
-            <ListItemIcon>
-              <AssignmentIcon />
-            </ListItemIcon>
-          </Tooltip>
-          {open && <ListItemText primary="Tasks" />}
-        </ListItem>
+        <List>
+          <ListItem disablePadding>
+            <ListItemButton component={Link} to="/">
+              <Tooltip title="Home" placement="right" disableHoverListener={open}>
+                <ListItemIcon>
+                  <Home />
+                </ListItemIcon>
+              </Tooltip>
+              <ListItemText primary="Home" />
+            </ListItemButton>
+          </ListItem>
 
-        <ListItem button onClick={() => navigate('/assigned-tasks')}>
-          <Tooltip title="Assigned Tasks" placement="right" disableHoverListener={open}>
-            <ListItemIcon>
-              <AssignmentIcon />
-            </ListItemIcon>
-          </Tooltip>
-          {open && <ListItemText primary="Assigned Tasks" />}
-        </ListItem>
-        
-        <ListItem button onClick={() => navigate('/meeting-details')}>
-          <Tooltip title="Meeting Details" placement="right" disableHoverListener={open}>
-            <ListItemIcon>
-              <AssignmentIcon />
-            </ListItemIcon>
-          </Tooltip>
-          {open && <ListItemText primary="Meeting Details" />}
-        </ListItem>
+          <ListItem disablePadding>
+            <ListItemButton component={Link} to="/tasks">
+              <Tooltip title="Tasks" placement="right" disableHoverListener={open}>
+                <ListItemIcon>
+                  <Assignment />
+                </ListItemIcon>
+              </Tooltip>
+              <ListItemText primary="Tasks" />
+            </ListItemButton>
+          </ListItem>
 
-        <ListItem button onClick={() => navigate('/minutes')}>
-          <Tooltip title="Minutes" placement="right" disableHoverListener={open}>
-            <ListItemIcon>
-              <AssignmentIcon />
-            </ListItemIcon>
-          </Tooltip>
-          {open && <ListItemText primary="Minutes" />}
-        </ListItem>
+          <ListItem disablePadding>
+            <ListItemButton component={Link} to="/assigned-tasks">
+              <Tooltip title="Assigned Tasks" placement="right" disableHoverListener={open}>
+                <ListItemIcon>
+                  <Assignment />
+                </ListItemIcon>
+              </Tooltip>
+              <ListItemText primary="Assigned Tasks" />
+            </ListItemButton>
+          </ListItem>
 
-        <ListItem button onClick={() => navigate('/calendar')}>
-          <Tooltip title="Calendar" placement="right" disableHoverListener={open}>
-            <ListItemIcon>
-              <CalendarToday />
-            </ListItemIcon>
-          </Tooltip>
-          {open && <ListItemText primary="Calendar" />}
-        </ListItem>
-        
+          <ListItem disablePadding>
+            <ListItemButton component={Link} to="/meeting-details">
+              <Tooltip title="Meeting Details" placement="right" disableHoverListener={open}>
+                <ListItemIcon>
+                  <Assignment />
+                </ListItemIcon>
+              </Tooltip>
+              <ListItemText primary="Meeting Details" />
+            </ListItemButton>
+          </ListItem>
 
-        <Divider sx={{ my: 1 }} />
+          <ListItem disablePadding>
+            <ListItemButton component={Link} to="/minutes">
+              <Tooltip title="Minutes" placement="right" disableHoverListener={open}>
+                <ListItemIcon>
+                  <Assignment />
+                </ListItemIcon>
+              </Tooltip>
+              <ListItemText primary="Minutes" />
+            </ListItemButton>
+          </ListItem>
 
-        <ListItem button onClick={() => navigate('/login')}>
-          <Tooltip title="Logout" placement="right" disableHoverListener={open}>
-            <ListItemIcon>
-              <Logout />
-            </ListItemIcon>
-          </Tooltip>
-          {open && <ListItemText primary="Logout" secondary="enitha.it23@bitsathy.ac.in" />}
-        </ListItem>
-      </List>
-    </Drawer>
+          <ListItem disablePadding>
+            <ListItemButton component={Link} to="/calendar">
+              <Tooltip title="Calendar" placement="right" disableHoverListener={open}>
+                <ListItemIcon>
+                  <CalendarToday />
+                </ListItemIcon>
+              </Tooltip>
+              <ListItemText primary="Calendar" />
+            </ListItemButton>
+          </ListItem>
+        </List>
+
+        <Divider sx={{ mt: 'auto' }} />
+
+        <List>
+          <ListItem disablePadding>
+            <ListItemButton onClick={handleLogout}>
+              <Tooltip title="Logout" placement="right" disableHoverListener={open}>
+                <ListItemIcon>
+                  <Logout />
+                </ListItemIcon>
+              </Tooltip>
+              <ListItemText
+                primary="Logout"
+                secondary={email || 'No email available'}
+              />
+            </ListItemButton>
+          </ListItem>
+        </List>
+      </Drawer>
+    </Box>
   );
 }

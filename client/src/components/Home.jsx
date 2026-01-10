@@ -121,7 +121,7 @@ export default function Home() {
                       {meeting.meeting_venue}
                     </Typography>
                   </Stack>
-                </Stack>
+                </Stack> 
               </CardContent>
             </Card>
           ))

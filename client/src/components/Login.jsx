@@ -1,152 +1,162 @@
-import React, { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import React, { useState } from 'react';
 import {
   Box,
   Card,
   CardContent,
-  Typography,
   TextField,
   Button,
+  Typography,
   Alert,
-  InputAdornment,
-  IconButton,
-  Divider
-} from "@mui/material";
-import { Email, Lock, Visibility, VisibilityOff } from "@mui/icons-material";
-import GoogleIcon from '@mui/icons-material/Google';
-import api from "../api";
+  Container,
+  Link
+} from '@mui/material';
+import { useNavigate } from 'react-router-dom';
 
-const Login = () => {
-  const [formData, setFormData] = useState({ email: "", password: "" });
-  const [error, setError] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+export default function Login() {
+  const [data, setData] = useState({
+    email: '',
+    password: ''
+  });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    setData({
+      ...data,
+      [e.target.name]: e.target.value
+    });
+    setError(''); // Clear error when user types
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError("");
+    setError('');
+    setLoading(true);
 
     try {
-      const response = await api.post("/auth", formData);
+      const response = await fetch('http://localhost:5000/api/auth', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+      });
 
-      // ✅ STORE TOKEN & USER INFO
-      localStorage.setItem("token", response.data.token);
-      localStorage.setItem("firstName", response.data.firstName);
+      const result = await response.json();
 
-      navigate("/");
+      if (!response.ok) {
+        // Handle error response
+        throw new Error(result.message || 'Login failed');
+      }
+
+      // Success - save token and user data
+      localStorage.setItem('token', result.data);
+      localStorage.setItem('firstName', result.firstName);
+      localStorage.setItem('lastName', result.lastName);
+      localStorage.setItem('email', result.email);
+
+      // Redirect to home
+      navigate('/');
+      window.location.reload(); // Refresh to load user data
+
     } catch (err) {
-      console.error(err);
-      setError(err.response?.data || "Invalid email or password");
+      console.error('Login error:', err);
+      setError(err.message || 'An error occurred during login');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <Box
-      sx={{
-        minHeight: "100vh",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        bgcolor: "#f4f4f4",
-        p: 2,
-      }}
-    >
-      <Card sx={{ width: 400, borderRadius: 3, boxShadow: 6, p: 3 }}>
-        <CardContent>
-          <Typography
-            variant="h4"
-            fontWeight="bold"
-            textAlign="center"
-            gutterBottom
-            sx={{ color: "#3d314a" }}
-          >
-            Login
-          </Typography>
+    <Container maxWidth="sm">
+      <Box
+        sx={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}
+      >
+        <Card sx={{ width: '100%', maxWidth: 450 }}>
+          <CardContent sx={{ p: 4 }}>
+            <Typography variant="h4" fontWeight="bold" align="center" gutterBottom>
+              Meeting Management
+            </Typography>
+            <Typography variant="h6" align="center" color="text.secondary" sx={{ mb: 4 }}>
+              Sign In
+            </Typography>
 
-          {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {error}
-            </Alert>
-          )}
+            {error && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {error}
+              </Alert>
+            )}
 
-          <Box component="form" onSubmit={handleSubmit}>
-            <TextField
-              label="Email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              fullWidth
-              required
-              size="small"
-              sx={{ mb: 2 }}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <Email />
-                  </InputAdornment>
-                ),
-              }}
-            />
+            <form onSubmit={handleSubmit}>
+              <TextField
+                fullWidth
+                label="Email"
+                name="email"
+                type="email"
+                value={data.email}
+                onChange={handleChange}
+                required
+                sx={{ mb: 2 }}
+                autoComplete="email"
+              />
 
-            <TextField
-              label="Password"
-              name="password"
-              type={showPassword ? "text" : "password"}
-              value={formData.password}
-              onChange={handleChange}
-              fullWidth
-              required
-              size="small"
-              sx={{ mb: 2 }}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <Lock />
-                  </InputAdornment>
-                ),
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton onClick={() => setShowPassword(!showPassword)}>
-                      {showPassword ? <VisibilityOff /> : <Visibility />}
-                    </IconButton>
-                  </InputAdornment>
-                ),
-              }}
-            />
+              <TextField
+                fullWidth
+                label="Password"
+                name="password"
+                type="password"
+                value={data.password}
+                onChange={handleChange}
+                required
+                sx={{ mb: 3 }}
+                autoComplete="current-password"
+              />
 
-            <Button
-              type="submit"
-              fullWidth
-              variant="contained"
-              sx={{ bgcolor: "#3d314a", mb: 2 }}
-            >
-              Login
-            </Button>
-          </Box>
+              <Button
+                type="submit"
+                fullWidth
+                variant="contained"
+                size="large"
+                disabled={loading}
+                sx={{ mb: 2 }}
+              >
+                {loading ? 'Signing In...' : 'Sign In'}
+              </Button>
 
-          <Divider sx={{ my: 2 }}>or</Divider>
+              <Typography align="center" variant="body2">
+                Don't have an account?{' '}
+                <Link href="/signup" underline="hover">
+                  Sign Up
+                </Link>
+              </Typography>
+            </form>
 
-          <Button
-            fullWidth
-            variant="outlined"
-            startIcon={<GoogleIcon />}
-          >
-            Sign in with Google
-          </Button>
-
-          <Typography variant="body2" textAlign="center" sx={{ mt: 2 }}>
-            Don't have an account?{" "}
-            <Link to="/signup">Sign Up</Link>
-          </Typography>
-        </CardContent>
-      </Card>
-    </Box>
+            <Box sx={{ mt: 3, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
+              <Typography variant="caption" display="block" gutterBottom fontWeight="bold">
+                Test Accounts:
+              </Typography>
+              <Typography variant="caption" display="block">
+                Admin: admin@college.edu
+              </Typography>
+              <Typography variant="caption" display="block">
+                HOD IT: it001@college.edu
+              </Typography>
+              <Typography variant="caption" display="block">
+                Faculty: it002@college.edu
+              </Typography>
+              <Typography variant="caption" display="block" sx={{ mt: 1 }}>
+                Password: Password@123
+              </Typography>
+            </Box>
+          </CardContent>
+        </Card>
+      </Box>
+    </Container>
   );
-};
-
-export default Login;
+}

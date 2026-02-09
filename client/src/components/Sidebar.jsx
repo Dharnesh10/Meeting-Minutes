@@ -18,10 +18,15 @@ import {
 import {
   Home,
   Logout,
-  Assignment,
-  CalendarToday,
+  PlaylistAddCheck,
+  AssignmentTurnedIn,
+  Groups,
+  Description,
+  CalendarMonth,
   ChevronLeft,
   ChevronRight,
+  Add,
+  Block
 } from '@mui/icons-material';
 
 import {jwtDecode} from 'jwt-decode';
@@ -112,6 +117,17 @@ export default function Sidebar({ open, setOpen }) {
 
         <List>
           <ListItem disablePadding>
+            <ListItemButton component={Link} to="/create-meeting">
+              <Tooltip title="Create Meeting" placement="right" disableHoverListener={open}>
+                <ListItemIcon>
+                  <Add />
+                </ListItemIcon>
+              </Tooltip>
+              <ListItemText primary="Create Meeting" />
+            </ListItemButton>
+          </ListItem>
+
+          <ListItem disablePadding>
             <ListItemButton component={Link} to="/">
               <Tooltip title="Home" placement="right" disableHoverListener={open}>
                 <ListItemIcon>
@@ -126,7 +142,7 @@ export default function Sidebar({ open, setOpen }) {
             <ListItemButton component={Link} to="/tasks">
               <Tooltip title="Tasks" placement="right" disableHoverListener={open}>
                 <ListItemIcon>
-                  <Assignment />
+                  <PlaylistAddCheck />
                 </ListItemIcon>
               </Tooltip>
               <ListItemText primary="Tasks" />
@@ -134,35 +150,13 @@ export default function Sidebar({ open, setOpen }) {
           </ListItem>
 
           <ListItem disablePadding>
-            <ListItemButton component={Link} to="/assigned-tasks">
-              <Tooltip title="Assigned Tasks" placement="right" disableHoverListener={open}>
+            <ListItemButton component={Link} to="/rejected-meetings">
+              <Tooltip title="Rejected Meetings" placement="right" disableHoverListener={open}>
                 <ListItemIcon>
-                  <Assignment />
+                  <Block />
                 </ListItemIcon>
               </Tooltip>
-              <ListItemText primary="Assigned Tasks" />
-            </ListItemButton>
-          </ListItem>
-
-          <ListItem disablePadding>
-            <ListItemButton component={Link} to="/meeting-details">
-              <Tooltip title="Meeting Details" placement="right" disableHoverListener={open}>
-                <ListItemIcon>
-                  <Assignment />
-                </ListItemIcon>
-              </Tooltip>
-              <ListItemText primary="Meeting Details" />
-            </ListItemButton>
-          </ListItem>
-
-          <ListItem disablePadding>
-            <ListItemButton component={Link} to="/minutes">
-              <Tooltip title="Minutes" placement="right" disableHoverListener={open}>
-                <ListItemIcon>
-                  <Assignment />
-                </ListItemIcon>
-              </Tooltip>
-              <ListItemText primary="Minutes" />
+              <ListItemText primary="Rejected Meetings" />
             </ListItemButton>
           </ListItem>
 
@@ -170,7 +164,7 @@ export default function Sidebar({ open, setOpen }) {
             <ListItemButton component={Link} to="/calendar">
               <Tooltip title="Calendar" placement="right" disableHoverListener={open}>
                 <ListItemIcon>
-                  <CalendarToday />
+                  <CalendarMonth />
                 </ListItemIcon>
               </Tooltip>
               <ListItemText primary="Calendar" />

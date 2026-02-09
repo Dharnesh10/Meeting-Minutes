@@ -21,6 +21,7 @@
     "@mui/x-date-pickers": "^8.11.3",
     "axios": "^1.13.2",
     "bootstrap": "^5.3.8",
+    "date-fns": "^2.30.0",
     "dayjs": "^1.11.18",
     "gapi-script": "^1.2.0",
     "jwt-decode": "^4.0.0",

@@ -1,0 +1,44 @@
+6/2/2026
+
+add card clickable feature - when meeting clicked not redirecting to meetingminutes page
+
+if users in the meeting are online, show they are active (live tracking) 
+
+in the total meeting time, the user percentage(time they attended the meeting) should be measured and should be updated after the meeting ends 
+eg: if the meeting is live for 60 mins if the user attended for 30 minutes he should be 30 mins active. this will be considered as attendance. 
+everything should be inside of the meeting card as different tabs (minutes, attendance, any extra tab if needed)
+
+
+7/2/2026
+
+instead of im attending tab in home let us have completed meetings.
+
+if the meeting is scheduled it should be approved and if the meeting ends it should ask whether the meeting is follow up meeting or not, if it has a follow up meeting then the create meeting page should be triggered and create a follow up meeting.
+
+the completed meeting should reside in a "completed meetings" tab and the approved meetings should be in "scheduled meetings" tab and all the meeting should be reside in "all meetings" tab.tabs (scheduled, all meetings, completed) dont need any other tabs instead keep a sort to sort the meetings (created by me, department meetings, followup, if any other needed)
+
+approved should be - approved(green color) approval pending - approval pending(orange) if the meeting has ended-completed meetings - completed(red) if we create a followup the original meeting should end and the follow up should be created which will have a f symbol in the top right corner of the card component if the meeting created is a followup it should be specified in the card as (F) indicating that it is a followup meeting. if the meeting is cancelled by the user or approval rejected, it should be residing in a seperate page(which will be one of the component in sidebar named rejected meetings - when clicked goes inside the page) as a small card(each cancelled or rejected in a card) only when clicked should show the details, in the card it should be specified that it is cancelled by user or rejected by hod.
+
+for already cancelled meeting now it shows that start meeting button and the meeting actually starts but it should not happen.
+
+for hods iin pending approval, even if the hod is not in that specific tab, a notification with a number should be specified that how much approvals is pending
+
+
+
+also add additional features that will be cool and attractive and which is meaningfull and logically correct
+
+
+8/1/2026
+
+if i create meeting it shows meeting ended directly check the files and give me full updated files and routes
+
+9/1/2026
+
+when the venue is booked the same venue cannot be booked on same time and date-this feature is working good, but when the meeting is scheduled for a staff or the particular person at a 
+particular time and date any other staffs cannot choose the attendees for the same time and date (the time and date which they've been scheduled with other meeting). same applys for the person who creates meeting,
+if a person creates meeting or has been assigned with other meeting he cannot create another meeting or be assigned with another meeting in same time and date.
+the aim is that, a single person cannot be simultaneously in two or more meetings at same time and date, he should be either created meeting at a particualr time and date or should be assigned with a meeting at a particualar time and date.
+if he is assigned in a meeting in a particular time and date, he cannot be added in the attendees list if someone else create the meeting at the same time and date that he has been assigned already with a meeting.
+
+when i cancell meeting (which is created by a user) using hod account it actually cancells and gives a msg that it is "cancelled by user", but it shouldnt, hods can only reject or approve the meeting, once if they done it will be reflected , 
+then if the meeting should be cancelled later after hod approval it can only be done by the user(who created meeting)

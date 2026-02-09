@@ -1,34 +1,58 @@
 const router = require('express').Router();
-const bcrypt = require('bcryptjs')
-const jwt = require('jsonwebtoken');
-const { User, loginSchema } = require('../models/user');
+const bcrypt = require('bcrypt');
+const Joi = require('joi');
+const { User } = require('../models/user');
 
+// Login endpoint
 router.post('/', async (req, res) => {
-    const { error, value } = loginSchema.validate(req.body);
-    if (error) return res.status(400).send(error.details[0].message);
+  try {
+    // Validate input
+    const { error } = validate(req.body);
+    if (error) {
+      return res.status(400).send({ message: error.details[0].message });
+    }
 
-    // Check if user exists
-    const user = await User.findOne({ email: value.email.toLowerCase() });
-    if (!user) return res.status(400).send('Invalid email or password.');
+    // Find user by email
+    const user = await User.findOne({ email: req.body.email });
+    if (!user) {
+      return res.status(401).send({ message: 'Invalid Email or Password' });
+    }
 
-    // Check password
-    const isValidPassword = await bcrypt.compare(value.password, user.passwordHash);
-    if (!isValidPassword) return res.status(400).send('Invalid email or password.');
-
-    // Create JWT
-    const token = jwt.sign(
-        { id: user._id, email: user.email, name: user.firstName }, 
-        process.env.JWT_SECRET || "dev_secret_change_me", 
-        { expiresIn: process.env.JWT_EXPIRES_IN || '1h' }
+    // Verify password
+    const validPassword = await bcrypt.compare(
+      req.body.password,
+      user.passwordHash
     );
+    
+    if (!validPassword) {
+      return res.status(401).send({ message: 'Invalid Email or Password' });
+    }
 
-    res.status(200).send({ 
-            message: 'Login successful', 
-            token, id: user._id, 
-            firstName: user.firstName, 
-            lastName: user.lastName, 
-            email: user.email 
+    // Generate token
+    const token = user.generateAuthToken();
+
+    // Send response
+    res.status(200).send({
+      data: token,
+      message: 'Logged in successfully',
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email
     });
+
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).send({ message: 'Internal Server Error' });
+  }
 });
+
+// Validation
+const validate = (data) => {
+  const schema = Joi.object({
+    email: Joi.string().email().required().label('Email'),
+    password: Joi.string().required().label('Password'),
+  });
+  return schema.validate(data);
+};
 
 module.exports = router;

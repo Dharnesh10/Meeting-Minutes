@@ -1,57 +1,759 @@
 const router = require('express').Router();
 const authMiddleware = require('../middleware/auth');
 const { ScheduledMeeting } = require('../models/scheduledMeeting');
+const { User } = require('../models/user');
+const { Department } = require('../models/department');
+const { Venue } = require('../models/venue');
 
-// Get all scheduled meetings for logged-in user
-router.get('/', authMiddleware, async (req, res) => {
-  const meetings = await ScheduledMeeting
-    .find({ createdBy: req.user.id })
-    .sort({ meeting_datetime: 1 });
+// Generate unique meeting ID
+async function generateUniqueMeetingId() {
+  let meetingid;
+  let exists = true;
 
-  res.status(200).send(meetings);
+  while (exists) {
+    meetingid = Math.floor(100000 + Math.random() * 900000);
+    const existing = await ScheduledMeeting.findOne({ meetingid });
+    exists = !!existing;
+  }
+
+  return meetingid;
+}
+
+// Get pending approval count for HODs
+router.get('/pending-count', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    
+    if (!user.canApproveMeetings) {
+      return res.status(200).send({ count: 0 });
+    }
+
+    const count = await ScheduledMeeting.countDocuments({
+      status: 'pending_approval',
+      approver: req.user.id
+    });
+
+    res.status(200).send({ count });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ message: 'Server error' });
+  }
 });
 
-// Create scheduled meeting
+// Get rejected and cancelled meetings
+router.get('/rejected-cancelled', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).populate('department');
+
+    const meetings = await ScheduledMeeting.find({
+      $or: [
+        { createdBy: req.user.id },
+        { 'attendees.user': req.user.id },
+        { departments: user.department._id }
+      ],
+      status: { $in: ['rejected', 'cancelled'] }
+    })
+      .populate('createdBy', 'firstName lastName email facultyId')
+      .populate('venue', 'name code')
+      .populate('attendees.user', 'firstName lastName email facultyId')
+      .populate('departments', 'name code')
+      .populate('approver', 'firstName lastName email')
+      .populate('cancelledBy', 'firstName lastName email')
+      .sort({ updatedAt: -1 });
+
+    res.status(200).send(meetings);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ message: 'Server error' });
+  }
+});
+
+// Get all meetings for logged-in user with filters
+router.get('/', authMiddleware, async (req, res) => {
+  try {
+    const { status, role, filter } = req.query;
+    const user = await User.findById(req.user.id).populate('department');
+
+    let query = {};
+
+    // Base query for user's meetings
+    if (role === 'created') {
+      query.createdBy = req.user.id;
+    } else if (role === 'attending') {
+      query['attendees.user'] = req.user.id;
+    } else if (role === 'pending_approval' && user.canApproveMeetings) {
+      query.status = 'pending_approval';
+      query.approver = req.user.id;
+    } else if (role === 'department') {
+      query.departments = user.department._id;
+    } else {
+      query.$or = [
+        { createdBy: req.user.id },
+        { 'attendees.user': req.user.id },
+        { departments: user.department._id }
+      ];
+    }
+
+    // Status filter
+    if (status) {
+      query.status = status;
+    } else {
+      // Exclude rejected and cancelled from normal views
+      query.status = { $nin: ['rejected', 'cancelled'] };
+    }
+
+    // Additional filters
+    if (filter) {
+      switch (filter) {
+        case 'created':
+          query.createdBy = req.user.id;
+          break;
+        case 'department':
+          query.departments = user.department._id;
+          break;
+        case 'followup':
+          query.isFollowup = true;
+          break;
+        case 'high_priority':
+          query.priority = { $in: ['high', 'urgent'] };
+          break;
+        case 'this_week':
+          const today = new Date();
+          const weekFromNow = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+          query.meeting_datetime = {
+            $gte: today,
+            $lte: weekFromNow
+          };
+          break;
+      }
+    }
+
+    const meetings = await ScheduledMeeting.find(query)
+      .populate('createdBy', 'firstName lastName email facultyId role')
+      .populate('venue', 'name code capacity')
+      .populate('attendees.user', 'firstName lastName email facultyId department role')
+      .populate('departments', 'name code')
+      .populate('approver', 'firstName lastName email role')
+      .populate('parentMeeting', 'meeting_name meetingid')
+      .populate('currentScribe', 'firstName lastName email')
+      .sort({ meeting_datetime: 1 });
+
+    res.status(200).send(meetings);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ message: 'Server error' });
+  }
+});
+
+// Get single meeting
+router.get('/:id', authMiddleware, async (req, res) => {
+  try {
+    const meeting = await ScheduledMeeting.findById(req.params.id)
+      .populate('createdBy', 'firstName lastName email facultyId role department')
+      .populate('venue', 'name code capacity facilities floor building')
+      .populate('attendees.user', 'firstName lastName email facultyId department role')
+      .populate('departments', 'name code fullName')
+      .populate('approver', 'firstName lastName email role')
+      .populate('currentScribe', 'firstName lastName email facultyId')
+      .populate('parentMeeting', 'meeting_name meetingid meeting_datetime')
+      .populate('followupMeetings', 'meeting_name meetingid meeting_datetime status')
+      .populate('actionItems.assignedTo', 'firstName lastName email')
+      .populate('decisions.madeBy', 'firstName lastName email')
+      .populate('completedBy', 'firstName lastName email')
+      .populate('cancelledBy', 'firstName lastName email');
+
+    if (!meeting) {
+      return res.status(404).send({ message: 'Meeting not found' });
+    }
+
+    res.status(200).send(meeting);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ message: 'Server error' });
+  }
+});
+
+// Create scheduled meeting - CORRECTED VERSION
 router.post('/', authMiddleware, async (req, res) => {
   try {
     const {
       meeting_name,
-      meeting_host_by,
-      meeting_host_name,
-      meeting_date, // yyyy-mm-dd
-      meeting_time, // HH:mm
-      meeting_venue
+      meeting_description,
+      meeting_date,
+      meeting_time,
+      meeting_duration,
+      venue,
+      attendees,
+      departments,
+      agenda,
+      meetingType,
+      priority,
+      isFollowup,
+      parentMeetingId
     } = req.body;
 
-    if (!meeting_date || !meeting_time) {
-      return res.status(400).send('Meeting date and time are required');
+    // Validation
+    if (!meeting_name || !meeting_date || !meeting_time || !venue) {
+      return res.status(400).send({ message: 'Required fields are missing' });
     }
 
-    // Combine date + time from form
+    // Get user details
+    const user = await User.findById(req.user.id).populate('department');
+    
+    // Combine date + time
     const meeting_datetime = new Date(`${meeting_date}T${meeting_time}:00`);
 
-    // Generate random 6-digit meeting ID
-    const meetingid = Math.floor(100000 + Math.random() * 900000);
+    // Validate future datetime
+    if (meeting_datetime < new Date()) {
+      return res.status(400).send({ message: 'Meeting date/time must be in the future' });
+    }
 
+    // Calculate duration and end time
+    const duration = meeting_duration || 60;
+    const meeting_end_datetime = new Date(meeting_datetime.getTime() + duration * 60000);
+
+    // Check venue availability
+    const conflicts = await ScheduledMeeting.find({
+      venue: venue,
+      status: { $in: ['pending_approval', 'approved'] },
+      $or: [
+        { meeting_datetime: { $gte: meeting_datetime, $lt: meeting_end_datetime } },
+        { meeting_end_datetime: { $gt: meeting_datetime, $lte: meeting_end_datetime } },
+        { 
+          meeting_datetime: { $lte: meeting_datetime },
+          meeting_end_datetime: { $gte: meeting_end_datetime }
+        }
+      ]
+    });
+
+    if (conflicts.length > 0) {
+      return res.status(400).send({ 
+        message: 'Venue is not available for the selected time slot',
+        conflicts
+      });
+    }
+
+    // Determine approver
+    const department = await Department.findById(user.department._id);
+    let approver = null;
+    let status = 'approved';
+
+    if (user.role !== 'HOD' && user.role !== 'Admin') {
+      if (!department.hod) {
+        return res.status(400).send({ 
+          message: 'No HOD assigned to your department. Please contact admin.' 
+        });
+      }
+      approver = department.hod;
+      status = 'pending_approval';
+    }
+
+    // Generate unique meeting ID
+    const meetingid = await generateUniqueMeetingId();
+
+    // Collect all attendees (individual + department members)
+    let allAttendeeIds = new Set();
+
+    if (attendees && attendees.length > 0) {
+      attendees.forEach(id => allAttendeeIds.add(id.toString()));
+    }
+
+    if (departments && departments.length > 0) {
+      console.log('Adding department members for departments:', departments);
+      for (const deptId of departments) {
+        const deptUsers = await User.find({ 
+          department: deptId,
+          isActive: true 
+        }).select('_id');
+        
+        console.log(`Found ${deptUsers.length} users in department ${deptId}`);
+        deptUsers.forEach(u => allAttendeeIds.add(u._id.toString()));
+      }
+    }
+
+    const formattedAttendees = Array.from(allAttendeeIds).map(userId => ({
+      user: userId,
+      responseStatus: 'pending'
+    }));
+
+    console.log(`Total attendees: ${formattedAttendees.length}`);
+
+    // Create meeting - IMPORTANT: Do NOT set meetingStarted or meetingEnded
     const meeting = new ScheduledMeeting({
       meeting_name,
-      meeting_host_by,
-      meeting_host_name,
+      meeting_description,
+      meeting_host_name: `${user.firstName} ${user.lastName}`,
+      createdBy: req.user.id,
       meeting_datetime,
-      meeting_venue,
+      meeting_duration: duration,
+      meeting_end_datetime,
+      venue,
+      attendees: formattedAttendees,
+      departments: departments || [],
+      agenda: agenda || [],
       meetingid,
-      createdBy: req.user.id
+      status,
+      approver,
+      meetingType: meetingType || 'internal',
+      priority: priority || 'medium',
+      isFollowup: isFollowup || false,
+      parentMeeting: parentMeetingId || null,
+      // DO NOT SET meetingStarted or meetingEnded - let defaults apply
+      // meetingStarted: false, // This is default
+      // meetingEnded: false,   // This is default
     });
 
     await meeting.save();
 
+    // If this is a followup, update parent meeting
+    if (isFollowup && parentMeetingId) {
+      await ScheduledMeeting.findByIdAndUpdate(parentMeetingId, {
+        $push: { followupMeetings: meeting._id },
+        meeting_followup: true
+      });
+    }
+
+    await meeting.populate('createdBy', 'firstName lastName email');
+    await meeting.populate('venue', 'name code');
+    await meeting.populate('attendees.user', 'firstName lastName email');
+    await meeting.populate('departments', 'name code');
+    await meeting.populate('approver', 'firstName lastName email');
+
     res.status(201).send({
-      message: 'Meeting scheduled successfully',
+      message: status === 'pending_approval' 
+        ? 'Meeting created and sent for approval' 
+        : 'Meeting created successfully',
+      meeting,
+      requiresApproval: status === 'pending_approval',
+      totalAttendees: formattedAttendees.length,
+      isFollowup: isFollowup || false
+    });
+  } catch (err) {
+    console.error('Create meeting error:', err);
+    res.status(500).send({ message: 'Server error', error: err.message });
+  }
+});
+
+// Complete a meeting
+router.post('/:id/complete', authMiddleware, async (req, res) => {
+  try {
+    const { completionNotes, rating, feedback } = req.body;
+
+    const meeting = await ScheduledMeeting.findById(req.params.id);
+
+    if (!meeting) {
+      return res.status(404).send({ message: 'Meeting not found' });
+    }
+
+    // Only creator or HOD can complete
+    const user = await User.findById(req.user.id);
+    const isCreator = meeting.createdBy.toString() === req.user.id;
+
+    if (!isCreator && !user.canApproveMeetings) {
+      return res.status(403).send({ message: 'Only the creator or HOD can complete meetings' });
+    }
+
+    if (meeting.status === 'cancelled') {
+      return res.status(400).send({ message: 'Cannot complete a cancelled meeting' });
+    }
+
+    meeting.status = 'completed';
+    meeting.meetingEnded = true;
+    meeting.meetingEndedAt = new Date();
+    meeting.completionNotes = completionNotes;
+    meeting.completedBy = req.user.id;
+    
+    if (rating) meeting.rating = rating;
+    if (feedback) meeting.feedback = feedback;
+
+    await meeting.save();
+
+    res.status(200).send({
+      message: 'Meeting completed successfully',
       meeting
     });
   } catch (err) {
     console.error(err);
-    res.status(500).send('Server error');
+    res.status(500).send({ message: 'Server error' });
+  }
+});
+
+// Update meeting
+router.put('/:id', authMiddleware, async (req, res) => {
+  try {
+    const meeting = await ScheduledMeeting.findById(req.params.id);
+
+    if (!meeting) {
+      return res.status(404).send({ message: 'Meeting not found' });
+    }
+
+    const isCreator = meeting.createdBy.toString() === req.user.id;
+    const user = await User.findById(req.user.id);
+    const canEdit = isCreator || user.canApproveMeetings;
+
+    if (!canEdit) {
+      return res.status(403).send({ message: 'Access denied' });
+    }
+
+    const {
+      meeting_name,
+      meeting_description,
+      meeting_date,
+      meeting_time,
+      meeting_duration,
+      venue,
+      attendees,
+      departments,
+      agenda,
+      priority,
+      meetingType
+    } = req.body;
+
+    if (meeting_name) meeting.meeting_name = meeting_name;
+    if (meeting_description) meeting.meeting_description = meeting_description;
+    if (priority) meeting.priority = priority;
+    if (meetingType) meeting.meetingType = meetingType;
+    if (agenda) meeting.agenda = agenda;
+    if (departments) meeting.departments = departments;
+
+    if (meeting_date && meeting_time) {
+      meeting.meeting_datetime = new Date(`${meeting_date}T${meeting_time}:00`);
+    }
+
+    if (meeting_duration) {
+      meeting.meeting_duration = meeting_duration;
+    }
+
+    meeting.meeting_end_datetime = new Date(
+      meeting.meeting_datetime.getTime() + meeting.meeting_duration * 60000
+    );
+
+    if (venue) {
+      const conflicts = await ScheduledMeeting.find({
+        _id: { $ne: meeting._id },
+        venue: venue,
+        status: { $in: ['pending_approval', 'approved'] },
+        $or: [
+          { meeting_datetime: { $gte: meeting.meeting_datetime, $lt: meeting.meeting_end_datetime } },
+          { meeting_end_datetime: { $gt: meeting.meeting_datetime, $lte: meeting.meeting_end_datetime } },
+          { 
+            meeting_datetime: { $lte: meeting.meeting_datetime },
+            meeting_end_datetime: { $gte: meeting.meeting_end_datetime }
+          }
+        ]
+      });
+
+      if (conflicts.length > 0) {
+        return res.status(400).send({ 
+          message: 'Venue is not available for the selected time slot' 
+        });
+      }
+
+      meeting.venue = venue;
+    }
+
+    if (attendees) {
+      meeting.attendees = attendees.map(userId => ({
+        user: userId,
+        responseStatus: 'pending'
+      }));
+    }
+
+    await meeting.save();
+
+    await meeting.populate('createdBy', 'firstName lastName email');
+    await meeting.populate('venue', 'name code');
+    await meeting.populate('attendees.user', 'firstName lastName email');
+
+    res.status(200).send({
+      message: 'Meeting updated successfully',
+      meeting
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ message: 'Server error' });
+  }
+});
+
+// Approve meeting
+router.post('/:id/approve', authMiddleware, async (req, res) => {
+  try {
+    const meeting = await ScheduledMeeting.findById(req.params.id);
+
+    if (!meeting) {
+      return res.status(404).send({ message: 'Meeting not found' });
+    }
+
+    const user = await User.findById(req.user.id);
+
+    if (!user.canApproveMeetings) {
+      return res.status(403).send({ message: 'You do not have permission to approve meetings' });
+    }
+
+    if (meeting.approver && meeting.approver.toString() !== req.user.id) {
+      return res.status(403).send({ message: 'You are not the designated approver for this meeting' });
+    }
+
+    if (meeting.status !== 'pending_approval') {
+      return res.status(400).send({ message: 'Meeting is not pending approval' });
+    }
+
+    const { comments } = req.body;
+
+    meeting.status = 'approved';
+    meeting.approvalDate = new Date();
+    meeting.approvalComments = comments;
+
+    await meeting.save();
+
+    res.status(200).send({
+      message: 'Meeting approved successfully',
+      meeting
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ message: 'Server error' });
+  }
+});
+
+// Reject meeting
+router.post('/:id/reject', authMiddleware, async (req, res) => {
+  try {
+    const meeting = await ScheduledMeeting.findById(req.params.id);
+
+    if (!meeting) {
+      return res.status(404).send({ message: 'Meeting not found' });
+    }
+
+    const user = await User.findById(req.user.id);
+
+    if (!user.canApproveMeetings) {
+      return res.status(403).send({ message: 'You do not have permission to reject meetings' });
+    }
+
+    if (meeting.approver && meeting.approver.toString() !== req.user.id) {
+      return res.status(403).send({ message: 'You are not the designated approver for this meeting' });
+    }
+
+    if (meeting.status !== 'pending_approval') {
+      return res.status(400).send({ message: 'Meeting is not pending approval' });
+    }
+
+    const { reason } = req.body;
+
+    if (!reason) {
+      return res.status(400).send({ message: 'Rejection reason is required' });
+    }
+
+    meeting.status = 'rejected';
+    meeting.approvalDate = new Date();
+    meeting.rejectionReason = reason;
+
+    await meeting.save();
+
+    res.status(200).send({
+      message: 'Meeting rejected',
+      meeting
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ message: 'Server error' });
+  }
+});
+
+// Cancel meeting
+router.post('/:id/cancel', authMiddleware, async (req, res) => {
+  try {
+    const meeting = await ScheduledMeeting.findById(req.params.id);
+
+    if (!meeting) {
+      return res.status(404).send({ message: 'Meeting not found' });
+    }
+
+    const user = await User.findById(req.user.id);
+    const isCreator = meeting.createdBy.toString() === req.user.id;
+
+    if (!isCreator && !user.canApproveMeetings) {
+      return res.status(403).send({ message: 'Only the creator or HOD/Admin can cancel meetings' });
+    }
+
+    const { reason } = req.body;
+
+    meeting.status = 'cancelled';
+    meeting.cancellationReason = reason || 'No reason provided';
+    meeting.cancelledBy = req.user.id;
+    meeting.cancelledAt = new Date();
+    
+    await meeting.save();
+
+    res.status(200).send({
+      message: 'Meeting cancelled successfully'
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ message: 'Server error' });
+  }
+});
+
+// Add action item
+router.post('/:id/action-item', authMiddleware, async (req, res) => {
+  try {
+    const { description, assignedTo, dueDate } = req.body;
+
+    if (!description) {
+      return res.status(400).send({ message: 'Description is required' });
+    }
+
+    const meeting = await ScheduledMeeting.findById(req.params.id);
+
+    if (!meeting) {
+      return res.status(404).send({ message: 'Meeting not found' });
+    }
+
+    meeting.actionItems.push({
+      description,
+      assignedTo,
+      dueDate,
+      status: 'pending'
+    });
+
+    await meeting.save();
+
+    res.status(200).send({
+      message: 'Action item added successfully',
+      actionItems: meeting.actionItems
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ message: 'Server error' });
+  }
+});
+
+// Add decision
+router.post('/:id/decision', authMiddleware, async (req, res) => {
+  try {
+    const { description } = req.body;
+
+    if (!description) {
+      return res.status(400).send({ message: 'Description is required' });
+    }
+
+    const meeting = await ScheduledMeeting.findById(req.params.id);
+
+    if (!meeting) {
+      return res.status(404).send({ message: 'Meeting not found' });
+    }
+
+    meeting.decisions.push({
+      description,
+      madeBy: req.user.id,
+      madeAt: new Date()
+    });
+
+    await meeting.save();
+
+    res.status(200).send({
+      message: 'Decision recorded successfully',
+      decisions: meeting.decisions
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ message: 'Server error' });
+  }
+});
+
+// Update attendee response
+router.post('/:id/respond', authMiddleware, async (req, res) => {
+  try {
+    const { responseStatus } = req.body;
+
+    if (!['accepted', 'declined', 'tentative'].includes(responseStatus)) {
+      return res.status(400).send({ message: 'Invalid response status' });
+    }
+
+    const meeting = await ScheduledMeeting.findById(req.params.id);
+
+    if (!meeting) {
+      return res.status(404).send({ message: 'Meeting not found' });
+    }
+
+    const attendee = meeting.attendees.find(
+      a => a.user.toString() === req.user.id
+    );
+
+    if (!attendee) {
+      return res.status(404).send({ message: 'You are not invited to this meeting' });
+    }
+
+    attendee.responseStatus = responseStatus;
+    attendee.responseDate = new Date();
+
+    await meeting.save();
+
+    res.status(200).send({
+      message: 'Response updated successfully',
+      responseStatus
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ message: 'Server error' });
+  }
+});
+
+// Delete meeting
+router.delete('/:id', authMiddleware, async (req, res) => {
+  try {
+    const meeting = await ScheduledMeeting.findById(req.params.id);
+
+    if (!meeting) {
+      return res.status(404).send({ message: 'Meeting not found' });
+    }
+
+    if (meeting.createdBy.toString() !== req.user.id) {
+      return res.status(403).send({ message: 'Only the meeting creator can delete it' });
+    }
+
+    if (meeting.status === 'approved') {
+      return res.status(400).send({ 
+        message: 'Cannot delete approved meetings. Please cancel instead.' 
+      });
+    }
+
+    await meeting.deleteOne();
+
+    res.status(200).send({ message: 'Meeting deleted successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ message: 'Server error' });
+  }
+});
+
+// Search users
+router.get('/search/users', authMiddleware, async (req, res) => {
+  try {
+    const { query } = req.query;
+
+    if (!query || query.length < 2) {
+      return res.status(400).send({ message: 'Search query too short' });
+    }
+
+    const users = await User.find({
+      isActive: true,
+      $or: [
+        { firstName: { $regex: query, $options: 'i' } },
+        { lastName: { $regex: query, $options: 'i' } },
+        { email: { $regex: query, $options: 'i' } },
+        { facultyId: { $regex: query, $options: 'i' } }
+      ]
+    })
+    .populate('department', 'name code')
+    .select('firstName lastName email facultyId role department')
+    .limit(20);
+
+    res.status(200).send(users);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ message: 'Server error' });
   }
 });
 

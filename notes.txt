@@ -41,4 +41,5 @@ the aim is that, a single person cannot be simultaneously in two or more meeting
 if he is assigned in a meeting in a particular time and date, he cannot be added in the attendees list if someone else create the meeting at the same time and date that he has been assigned already with a meeting.
 
 when i cancell meeting (which is created by a user) using hod account it actually cancells and gives a msg that it is "cancelled by user", but it shouldnt, hods can only reject or approve the meeting, once if they done it will be reflected , 
-then if the meeting should be cancelled later after hod approval it can only be done by the user(who created meeting)
+then if the meeting should be cancelled later after hod approval it can only be done by the user(who created meeting).
+even if the meeting has not started im able to add minute that should not happen. the minutes can be deleted or updated by the user who created it and can be done only until the meeting is alive after meetying ends it should not be allowed. 

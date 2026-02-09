@@ -28,8 +28,11 @@ router.get('/:meetingId', authMiddleware, async (req, res) => {
     const isScribe = meeting.currentScribe && meeting.currentScribe._id.toString() === req.user.id;
     const isAttendee = meeting.attendees.some(a => a.user._id.toString() === req.user.id);
 
-    const canTakeMinutes = !meeting.meetingEnded && (
-      (isCreator && !meeting.currentScribe) || isScribe
+    // FIXED: Can take minutes if meeting has started AND (is creator with no scribe OR is scribe)
+    const canTakeMinutes = meeting.meetingStarted && !meeting.meetingEnded && (
+      (isCreator && !meeting.currentScribe) || // Creator when no scribe assigned
+      (isCreator && isScribe) ||                // Creator who is also the scribe
+      isScribe                                   // Assigned scribe
     );
 
     const permissions = {
@@ -37,7 +40,8 @@ router.get('/:meetingId', authMiddleware, async (req, res) => {
       isCreator,
       isScribe,
       canApproveScribe: isCreator && !meeting.meetingEnded,
-      canView: isCreator || isScribe || isAttendee
+      canView: isCreator || isScribe || isAttendee,
+      meetingStarted: meeting.meetingStarted
     };
 
     res.status(200).send({
@@ -56,7 +60,7 @@ router.get('/:meetingId', authMiddleware, async (req, res) => {
   }
 });
 
-// Add a new minute
+// Add a new minute - FIXED PERMISSION LOGIC
 router.post('/:meetingId', authMiddleware, async (req, res) => {
   try {
     const { content } = req.body;
@@ -71,18 +75,42 @@ router.post('/:meetingId', authMiddleware, async (req, res) => {
       return res.status(404).send({ message: 'Meeting not found' });
     }
 
+    // CHECK 1: Meeting must have started
+    if (!meeting.meetingStarted) {
+      return res.status(400).send({ 
+        message: 'Cannot add minutes before the meeting has started' 
+      });
+    }
+
+    // CHECK 2: Meeting must not have ended
     if (meeting.meetingEnded) {
       return res.status(400).send({ message: 'Cannot add minutes to ended meeting' });
     }
 
-    // Check permissions
+    // CHECK 3: Permission check - FIXED LOGIC
     const isCreator = meeting.createdBy.toString() === req.user.id;
     const isScribe = meeting.currentScribe && meeting.currentScribe.toString() === req.user.id;
 
+    // FIXED: Allow if:
+    // 1. Creator when no scribe is assigned, OR
+    // 2. User is the assigned scribe (regardless of if they're also creator)
     const canTakeMinutes = (isCreator && !meeting.currentScribe) || isScribe;
 
     if (!canTakeMinutes) {
-      return res.status(403).send({ message: 'You do not have permission to take minutes' });
+      // Provide helpful error message
+      if (!isCreator && !isScribe) {
+        return res.status(403).send({ 
+          message: 'Only the meeting host or assigned scribe can take minutes' 
+        });
+      }
+      if (isCreator && meeting.currentScribe && !isScribe) {
+        return res.status(403).send({ 
+          message: 'A scribe has been assigned. Only the scribe can take minutes now.' 
+        });
+      }
+      return res.status(403).send({ 
+        message: 'You do not have permission to take minutes' 
+      });
     }
 
     // Get the next order number
@@ -110,7 +138,7 @@ router.post('/:meetingId', authMiddleware, async (req, res) => {
   }
 });
 
-// Update a minute
+// Update a minute - ONLY BY CREATOR AND ONLY DURING MEETING
 router.put('/:meetingId/:minuteId', authMiddleware, async (req, res) => {
   try {
     const { content } = req.body;
@@ -125,6 +153,7 @@ router.put('/:meetingId/:minuteId', authMiddleware, async (req, res) => {
       return res.status(404).send({ message: 'Meeting not found' });
     }
 
+    // Cannot edit after meeting has ended
     if (meeting.meetingEnded) {
       return res.status(400).send({ message: 'Cannot edit minutes after meeting has ended' });
     }
@@ -135,7 +164,7 @@ router.put('/:meetingId/:minuteId', authMiddleware, async (req, res) => {
       return res.status(404).send({ message: 'Minute not found' });
     }
 
-    // Only the author can edit
+    // Only the author/creator of the minute can edit it
     if (minute.createdBy.toString() !== req.user.id) {
       return res.status(403).send({ message: 'You can only edit your own minutes' });
     }
@@ -150,7 +179,7 @@ router.put('/:meetingId/:minuteId', authMiddleware, async (req, res) => {
   }
 });
 
-// Delete a minute (soft delete)
+// Delete a minute - ONLY BY CREATOR AND ONLY DURING MEETING
 router.delete('/:meetingId/:minuteId', authMiddleware, async (req, res) => {
   try {
     const meeting = await ScheduledMeeting.findById(req.params.meetingId);
@@ -159,6 +188,7 @@ router.delete('/:meetingId/:minuteId', authMiddleware, async (req, res) => {
       return res.status(404).send({ message: 'Meeting not found' });
     }
 
+    // Cannot delete after meeting has ended
     if (meeting.meetingEnded) {
       return res.status(400).send({ message: 'Cannot delete minutes after meeting has ended' });
     }
@@ -169,7 +199,7 @@ router.delete('/:meetingId/:minuteId', authMiddleware, async (req, res) => {
       return res.status(404).send({ message: 'Minute not found' });
     }
 
-    // Only the author can delete
+    // Only the author/creator can delete their own minutes
     if (minute.createdBy.toString() !== req.user.id) {
       return res.status(403).send({ message: 'You can only delete your own minutes' });
     }
@@ -264,7 +294,7 @@ router.post('/:meetingId/scribe/remove', authMiddleware, async (req, res) => {
   }
 });
 
-// Start meeting - WITH HOD APPROVAL AND TIME VALIDATION
+// Start meeting - WITH ALL VALIDATIONS
 router.post('/:meetingId/start', authMiddleware, async (req, res) => {
   try {
     const meeting = await ScheduledMeeting.findById(req.params.meetingId);
@@ -278,7 +308,7 @@ router.post('/:meetingId/start', authMiddleware, async (req, res) => {
       return res.status(403).send({ message: 'Only the meeting creator can start the meeting' });
     }
 
-    // CRITICAL CHECK 1: Must be approved by HOD
+    // Must be approved by HOD
     if (meeting.status !== 'approved') {
       return res.status(400).send({ 
         message: 'Meeting must be approved by HOD before it can be started',
@@ -286,17 +316,17 @@ router.post('/:meetingId/start', authMiddleware, async (req, res) => {
       });
     }
 
-    // CRITICAL CHECK 2: Cannot start cancelled meetings
+    // Cannot start cancelled meetings
     if (meeting.status === 'cancelled') {
       return res.status(400).send({ message: 'Cannot start a cancelled meeting' });
     }
 
-    // CRITICAL CHECK 3: Already started
+    // Already started
     if (meeting.meetingStarted) {
       return res.status(400).send({ message: 'Meeting has already been started' });
     }
 
-    // CRITICAL CHECK 4: Check if current time is within allowed window
+    // Check if current time is within allowed window
     const now = new Date();
     const meetingTime = new Date(meeting.meeting_datetime);
     const meetingEndTime = new Date(meeting.meeting_end_datetime);
@@ -305,7 +335,7 @@ router.post('/:meetingId/start', authMiddleware, async (req, res) => {
     const allowedStartTime = new Date(meetingTime.getTime() - 15 * 60000);
     
     // Check if meeting time has passed (with 1 hour grace period)
-    const graceEndTime = new Date(meetingEndTime.getTime() + 60 * 60000); // 1 hour after scheduled end
+    const graceEndTime = new Date(meetingEndTime.getTime() + 60 * 60000);
     
     if (now < allowedStartTime) {
       const minutesUntil = Math.ceil((allowedStartTime - now) / 60000);

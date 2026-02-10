@@ -1,4 +1,5 @@
-Meeting Management & Attendance Tracking System
+Meeting Management & Attendance Tracking System:
+
 A smart platform designed for structured meeting workflows, strict conflict prevention, and real-time attendance tracking. This system ensures zero scheduling conflicts and provides full traceability from creation to completion.
 
 🚀 Core Features:

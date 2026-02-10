@@ -8,7 +8,7 @@ import Login from './components/Login.jsx';
 import Signup from './components/SignUp.jsx';
 import Tasks from './pages/Mytasks.jsx';
 import AssignedTasks from './pages/AssignedTasks.jsx';
-import MeetingDetails from './pages/MeetingDetails.jsx'; // Updated component
+import MeetingDetails from './pages/MeetingDetails.jsx';
 import Minutes from './pages/Minutes.jsx';
 import MyCalendar from './components/Calendar.jsx';
 import CreateMeeting from './pages/CreateMeeting.jsx';
@@ -75,8 +75,9 @@ export default function App() {
             <Route path="/" element={<Home />} />
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/create-meeting" element={<CreateMeeting />} />
+            <Route path="/edit-meeting/:id" element={<CreateMeeting />} /> {/* ADDED: Edit route */}
             <Route path="/assigned-tasks" element={<AssignedTasks />} />
-            <Route path="/meeting-details" element={<MeetingDetails />} /> {/* Main meeting page */}
+            <Route path="/meeting-details" element={<MeetingDetails />} />
             <Route path="/minutes" element={<Minutes />} />
             <Route path="/calendar" element={<MyCalendar />} />
             <Route path="/rejected-meetings" element={<RejectedMeetings />} />

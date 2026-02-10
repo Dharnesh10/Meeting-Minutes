@@ -45,7 +45,7 @@ import {
   Info,
   Visibility,
   CallSplit,
-  FilterListAlt
+  FilterList
 } from '@mui/icons-material';
 
 export default function Home() {
@@ -73,25 +73,14 @@ export default function Home() {
   const [selectedMeeting, setSelectedMeeting] = useState(null);
 
   const userName = localStorage.getItem('firstName') || 'User';
+  const token = localStorage.getItem('token');
 
-  // 1. Fetch User Info ONCE on mount to establish Role
   useEffect(() => {
     fetchUserInfo();
-  }, []);
-
-  // 2. Fetch Meetings whenever Tab or Filter changes
-  useEffect(() => {
     fetchMeetings();
   }, [currentTab, sortFilter]);
 
-  // 3. Fetch Count immediately when we know the user is an HOD
-  useEffect(() => {
-    if (canApprove) {
-      fetchPendingApprovalCount();
-    }
-  }, [canApprove]);
-
-  // 4. Poll for pending approval count every 30 seconds for HODs
+  // Poll for pending approval count every 30 seconds for HODs
   useEffect(() => {
     if (!canApprove) return;
     
@@ -103,7 +92,6 @@ export default function Home() {
   }, [canApprove]);
 
   const fetchUserInfo = async () => {
-    const token = localStorage.getItem('token');
     if (!token) return;
     
     try {
@@ -115,6 +103,9 @@ export default function Home() {
         const data = await res.json();
         setUserRole(data.role);
         setCanApprove(data.canApproveMeetings);
+        if (data.canApproveMeetings) {
+          fetchPendingApprovalCount();
+        }
       }
     } catch (err) {
       console.error(err);
@@ -122,7 +113,6 @@ export default function Home() {
   };
 
   const fetchPendingApprovalCount = async () => {
-    const token = localStorage.getItem('token');
     try {
       const res = await fetch('http://localhost:5000/api/meetings/pending-count', {
         headers: { Authorization: `Bearer ${token}` }
@@ -138,8 +128,6 @@ export default function Home() {
   };
 
   const fetchMeetings = async () => {
-    const token = localStorage.getItem('token');
-
     if (!token) {
       window.location.href = '/login';
       return;
@@ -194,6 +182,7 @@ export default function Home() {
   };
 
   const handleCardClick = (meetingId, event) => {
+    // Prevent navigation if clicking on buttons or menu
     if (
       event.target.closest('button') ||
       event.target.closest('.MuiIconButton-root') ||
@@ -205,15 +194,21 @@ export default function Home() {
     navigate(`/meeting-details?id=${meetingId}`);
   };
 
-  const handleDelete = async (id) => {
+  const handleEdit = (meeting, event) => {
+    event.stopPropagation();
+    // FIXED: Navigate to edit-meeting route with meeting ID
+    navigate(`/edit-meeting/${meeting._id}`);
+  };
+
+  const handleDelete = async (meeting, event) => {
+    event.stopPropagation();
+    
     if (!window.confirm('Are you sure you want to delete this meeting?')) {
       return;
     }
 
-    const token = localStorage.getItem('token');
-
     try {
-      const res = await fetch(`http://localhost:5000/api/meetings/${id}`, {
+      const res = await fetch(`http://localhost:5000/api/meetings/${meeting._id}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -221,10 +216,10 @@ export default function Home() {
       });
 
       if (res.ok) {
-        setMeetings(meetings.filter(m => m._id !== id));
+        setMeetings(meetings.filter(m => m._id !== meeting._id));
         setError('');
-        // Refresh count if we deleted a pending meeting
-        if (canApprove) fetchPendingApprovalCount();
+        // Close menu if open
+        handleMenuClose();
       } else {
         const data = await res.json();
         setError(data.message || 'Failed to delete meeting');
@@ -235,14 +230,14 @@ export default function Home() {
     }
   };
 
-  const handleCancel = async (id) => {
+  const handleCancel = async (meeting, event) => {
+    event.stopPropagation();
+    
     const reason = prompt('Please provide a reason for cancellation:');
     if (!reason) return;
 
-    const token = localStorage.getItem('token');
-
     try {
-      const res = await fetch(`http://localhost:5000/api/meetings/${id}/cancel`, {
+      const res = await fetch(`http://localhost:5000/api/meetings/${meeting._id}/cancel`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -253,6 +248,7 @@ export default function Home() {
 
       if (res.ok) {
         fetchMeetings();
+        handleMenuClose();
       } else {
         const data = await res.json();
         setError(data.message);
@@ -275,8 +271,6 @@ export default function Home() {
   };
 
   const handleApprove = async () => {
-    const token = localStorage.getItem('token');
-
     try {
       const res = await fetch(
         `http://localhost:5000/api/meetings/${approvalDialog.meeting._id}/approve`,
@@ -292,7 +286,7 @@ export default function Home() {
 
       if (res.ok) {
         fetchMeetings();
-        fetchPendingApprovalCount(); // This updates the count immediately
+        fetchPendingApprovalCount();
         closeApprovalDialog();
       } else {
         const data = await res.json();
@@ -304,56 +298,11 @@ export default function Home() {
     }
   };
 
-  // const handleApprove = async (meeting) => {
-  //   // 1. Optimistically hide errors
-  //   setError(''); 
-
-  //   try {
-  //     const token = localStorage.getItem('token');
-  //     const res = await fetch(`http://localhost:5000/api/meetings/${meeting._id}/approve`, {
-  //       method: 'POST',
-  //       headers: {
-  //         'Content-Type': 'application/json',
-  //         Authorization: `Bearer ${token}`,
-  //       },
-  //       body: JSON.stringify({ comments: approvalComments }) // if you have comments state
-  //     });
-
-  //     const data = await res.json();
-
-  //     if (res.ok) {
-  //       // ✅ Success: Remove the meeting from the list
-  //       setMeetings((prev) => prev.filter((m) => m._id !== meeting._id));
-        
-  //       // If you have a function to update the badge count, call it here
-  //       // fetchPendingApprovalCount(); 
-  //     } else {
-  //       // ⚠️ Error Case: Check if it's the "Already Done" error
-  //       if (res.status === 400 || data.message === "Meeting is not pending approval") {
-          
-  //         // FORCE REMOVE: The server says it's already done, so remove it from UI
-  //         setMeetings((prev) => prev.filter((m) => m._id !== meeting._id));
-          
-  //         // Optional: Show a success message instead of an error
-  //         alert("Meeting was already processed. List updated.");
-  //       } else {
-  //         // Real error (e.g., Database failed), keep it on screen
-  //         setError(data.message);
-  //       }
-  //     }
-  //   } catch (err) {
-  //     console.error(err);
-  //     setError('Failed to connect to server');
-  //   }
-  // };
-
   const handleReject = async () => {
     if (!rejectionReason.trim()) {
       setError('Please provide a reason for rejection');
       return;
     }
-
-    const token = localStorage.getItem('token');
 
     try {
       const res = await fetch(
@@ -370,7 +319,7 @@ export default function Home() {
 
       if (res.ok) {
         fetchMeetings();
-        fetchPendingApprovalCount(); // This updates the count immediately
+        fetchPendingApprovalCount();
         closeApprovalDialog();
       } else {
         const data = await res.json();
@@ -454,13 +403,10 @@ export default function Home() {
           </Typography>
           {userRole && <Chip label={userRole} size="small" color="primary" />}
           
-          {/* MODIFIED: Removed `&& pendingApprovalCount > 0`.
-              It now shows for all HODs (canApprove=true), regardless of count.
-              Added `showZero` to Badge to make 0 visible if desired.
-          */}
+          {/* Pending Approval Badge - Always visible for HODs */}
           {canApprove && (
             <Tooltip title="Pending approvals">
-              <Badge badgeContent={pendingApprovalCount} color="error" showZero>
+              <Badge badgeContent={pendingApprovalCount ? pendingApprovalCount : "0"} color="error">
                 <Chip 
                   label="Approvals Pending" 
                   color="warning" 
@@ -479,6 +425,7 @@ export default function Home() {
               <Refresh />
             </IconButton>
           </Tooltip>
+          {/* Sort/Filter */}
           <Box sx={{ mb: 3 }}>
             <FormControl size="small" sx={{ minWidth: 200 }}>
               <InputLabel>Filter By</InputLabel>
@@ -486,7 +433,7 @@ export default function Home() {
                 value={sortFilter}
                 label="Filter By"
                 onChange={(e) => setSortFilter(e.target.value)}
-                startAdornment={<FilterListAlt sx={{ mr: 1 }} />}
+                startAdornment={<FilterList sx={{ mr: 1 }} />}
               >
                 <MenuItem value="all">All Meetings</MenuItem>
                 <MenuItem value="created">Created by Me</MenuItem>
@@ -517,6 +464,7 @@ export default function Home() {
           <Tab label="Completed" />
         </Tabs>
       </Box>
+
 
       {/* Meeting Cards */}
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
@@ -571,16 +519,6 @@ export default function Home() {
                   color={getPriorityColor(meeting.priority)}
                   size="small"
                   sx={{ position: 'absolute', top: 8, right: 50, zIndex: 1 }}
-                />
-              )}
-
-              {/* Rating Badge (NEW) */}
-              {meeting.rating && (
-                <Chip
-                  label={`★ ${meeting.rating}`}
-                  color="primary"
-                  size="small"
-                  sx={{ position: 'absolute', top: 40, right: 8, zIndex: 1 }}
                 />
               )}
 
@@ -751,30 +689,21 @@ export default function Home() {
         </MenuItem>
         
         {selectedMeeting?.status === 'pending_approval' && (
-          <MenuItem onClick={() => { 
-            navigate(`/edit-meeting/${selectedMeeting?._id}`);
-            handleMenuClose();
-          }}>
+          <MenuItem onClick={(e) => handleEdit(selectedMeeting, e)}>
             <ListItemIcon><Edit fontSize="small" /></ListItemIcon>
             <ListItemText>Edit</ListItemText>
           </MenuItem>
         )}
 
         {selectedMeeting?.status === 'approved' && (
-          <MenuItem onClick={() => {
-            handleCancel(selectedMeeting?._id);
-            handleMenuClose();
-          }}>
+          <MenuItem onClick={(e) => handleCancel(selectedMeeting, e)}>
             <ListItemIcon><Cancel fontSize="small" color="error" /></ListItemIcon>
             <ListItemText>Cancel Meeting</ListItemText>
           </MenuItem>
         )}
 
         {selectedMeeting?.status === 'pending_approval' && (
-          <MenuItem onClick={() => {
-            handleDelete(selectedMeeting?._id);
-            handleMenuClose();
-          }}>
+          <MenuItem onClick={(e) => handleDelete(selectedMeeting, e)}>
             <ListItemIcon><Delete fontSize="small" color="error" /></ListItemIcon>
             <ListItemText>Delete</ListItemText>
           </MenuItem>

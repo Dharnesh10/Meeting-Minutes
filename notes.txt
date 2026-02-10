@@ -43,3 +43,8 @@ if he is assigned in a meeting in a particular time and date, he cannot be added
 when i cancell meeting (which is created by a user) using hod account it actually cancells and gives a msg that it is "cancelled by user", but it shouldnt, hods can only reject or approve the meeting, once if they done it will be reflected , 
 then if the meeting should be cancelled later after hod approval it can only be done by the user(who created meeting).
 even if the meeting has not started im able to add minute that should not happen. the minutes can be deleted or updated by the user who created it and can be done only until the meeting is alive after meetying ends it should not be allowed. 
+
+10/1/2026
+
+if i update the meeting with adding new attendees, and go and check for meeting details the details is not updated with new attendees.
+when i search for individual attendees im not able to see for anyone in the dropdown(its not searching and giving me the available attendees list)

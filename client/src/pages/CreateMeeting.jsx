@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
   Card,
@@ -30,10 +31,16 @@ import {
   MeetingRoom,
   Delete,
   Add,
-  Info
+  Info,
+  Edit,
+  Cancel as CancelIcon
 } from '@mui/icons-material';
 
 export default function CreateMeeting() {
+  const { id } = useParams(); // Get meeting ID from URL for edit mode
+  const navigate = useNavigate();
+  const isEditMode = !!id;
+
   const [formData, setFormData] = useState({
     meeting_name: '',
     meeting_description: '',
@@ -50,18 +57,25 @@ export default function CreateMeeting() {
 
   const [departments, setDepartments] = useState([]);
   const [venues, setVenues] = useState([]);
-  const [availableVenues, setAvailableVenues] = useState([]);
   const [userSearch, setUserSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [departmentUsers, setDepartmentUsers] = useState({});
   
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(isEditMode); // Load if editing
+  const [saving, setSaving] = useState(false);
   const [venueLoading, setVenueLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [venueAvailability, setVenueAvailability] = useState(null);
 
   const token = localStorage.getItem('token');
+
+  // Load existing meeting data if in edit mode
+  useEffect(() => {
+    if (isEditMode) {
+      loadMeetingData();
+    }
+  }, [id]);
 
   // Fetch departments and venues on mount
   useEffect(() => {
@@ -84,6 +98,58 @@ export default function CreateMeeting() {
       setSearchResults([]);
     }
   }, [userSearch]);
+
+  const loadMeetingData = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch(`http://localhost:5000/api/meetings/${id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to load meeting data');
+      }
+
+      const meeting = await res.json();
+
+      // Format date and time
+      const meetingDateTime = new Date(meeting.meeting_datetime);
+      const formattedDate = meetingDateTime.toISOString().split('T')[0];
+      const formattedTime = meetingDateTime.toTimeString().slice(0, 5);
+
+      // Format selected users with full user objects
+      const selectedUsers = meeting.attendees.map(a => ({
+        _id: a.user._id || a.user,
+        firstName: a.user.firstName || '',
+        lastName: a.user.lastName || '',
+        facultyId: a.user.facultyId || '',
+        email: a.user.email || '',
+        department: a.user.department || null,
+        role: a.user.role || ''
+      }));
+
+      // Populate form with existing data
+      setFormData({
+        meeting_name: meeting.meeting_name,
+        meeting_description: meeting.meeting_description || '',
+        meeting_date: formattedDate,
+        meeting_time: formattedTime,
+        meeting_duration: meeting.meeting_duration || 60,
+        venue: meeting.venue?._id || '',
+        meetingType: meeting.meetingType || 'internal',
+        priority: meeting.priority || 'medium',
+        selectedUsers: selectedUsers,
+        selectedDepartments: meeting.departments?.map(d => d._id) || [],
+        agenda: meeting.agenda || []
+      });
+
+      setLoading(false);
+    } catch (err) {
+      console.error('Load meeting error:', err);
+      setError('Failed to load meeting data');
+      setLoading(false);
+    }
+  };
 
   const fetchDepartments = async () => {
     try {
@@ -125,7 +191,8 @@ export default function CreateMeeting() {
         body: JSON.stringify({
           venueId: formData.venue,
           startTime,
-          duration: formData.meeting_duration
+          duration: formData.meeting_duration,
+          excludeMeetingId: isEditMode ? id : null // Exclude current meeting when editing
         })
       });
 
@@ -154,7 +221,6 @@ export default function CreateMeeting() {
   };
 
   const handleDepartmentSelect = async (deptId) => {
-    // Fetch users for this department if not already loaded
     if (!departmentUsers[deptId]) {
       try {
         const res = await fetch(
@@ -205,7 +271,6 @@ export default function CreateMeeting() {
     const deptIds = event.target.value;
     setFormData({ ...formData, selectedDepartments: deptIds });
     
-    // Load users for newly selected departments
     deptIds.forEach(id => handleDepartmentSelect(id));
   };
 
@@ -231,7 +296,7 @@ export default function CreateMeeting() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
+    setSaving(true);
     setError('');
     setSuccess('');
 
@@ -240,10 +305,17 @@ export default function CreateMeeting() {
       return;
     }
 
-    // Check venue availability one more time
+    // CRITICAL VALIDATION: At least one attendee required
+    if (formData.selectedUsers.length === 0 && formData.selectedDepartments.length === 0) {
+      setError('Please add at least one attendee or select a department');
+      setSaving(false);
+      return;
+    }
+
+    // Check venue availability
     if (venueAvailability && !venueAvailability.available) {
       setError('Selected venue is not available for this time slot');
-      setLoading(false);
+      setSaving(false);
       return;
     }
 
@@ -262,8 +334,14 @@ export default function CreateMeeting() {
         agenda: formData.agenda.filter(a => a.title)
       };
 
-      const res = await fetch('http://localhost:5000/api/meetings', {
-        method: 'POST',
+      const url = isEditMode 
+        ? `http://localhost:5000/api/meetings/${id}`
+        : 'http://localhost:5000/api/meetings';
+
+      const method = isEditMode ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method: method,
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
@@ -280,53 +358,63 @@ export default function CreateMeeting() {
       }
 
       if (!res.ok) {
-        throw new Error(data.message || 'Failed to create meeting');
+        throw new Error(data.message || 'Failed to save meeting');
       }
 
-      if (data.requiresApproval) {
-        setSuccess(
-          `Meeting created successfully! Meeting ID: ${data.meeting.meetingid}. ` +
-          `It has been sent to your HOD for approval.`
-        );
+      if (isEditMode) {
+        setSuccess('Meeting updated successfully!');
       } else {
-        setSuccess(
-          `Meeting created and approved! Meeting ID: ${data.meeting.meetingid}`
-        );
+        if (data.requiresApproval) {
+          setSuccess(
+            `Meeting created successfully! Meeting ID: ${data.meeting.meetingid}. ` +
+            `It has been sent to your HOD for approval.`
+          );
+        } else {
+          setSuccess(
+            `Meeting created and approved! Meeting ID: ${data.meeting.meetingid}`
+          );
+        }
       }
 
-      // Reset form
-      setFormData({
-        meeting_name: '',
-        meeting_description: '',
-        meeting_date: '',
-        meeting_time: '',
-        meeting_duration: 60,
-        venue: '',
-        meetingType: 'internal',
-        priority: 'medium',
-        selectedUsers: [],
-        selectedDepartments: [],
-        agenda: []
-      });
-      setVenueAvailability(null);
-
-      // Redirect after 3 seconds
+      // Redirect after 2 seconds
       setTimeout(() => {
-        window.location.href = '/';
-      }, 3000);
+        if (isEditMode) {
+          navigate(`/meeting-details?id=${id}`);
+          window.location.reload(); // Force refresh to show updates
+        } else {
+          navigate('/');
+        }
+      }, 1500);
 
     } catch (err) {
-      setError(err.message || 'Failed to create meeting');
-    } finally {
-      setLoading(false);
+      setError(err.message || 'Failed to save meeting');
+      setSaving(false);
     }
   };
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
+        <CircularProgress />
+        <Typography sx={{ ml: 2 }}>Loading meeting data...</Typography>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ maxWidth: 1000, mx: 'auto', p: 3 }}>
       <Typography variant="h4" fontWeight="bold" mb={3} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <AddCircleOutline fontSize="large" color="primary" />
-        Schedule New Meeting
+        {isEditMode ? (
+          <>
+            <Edit fontSize="large" color="primary" />
+            Edit Meeting
+          </>
+        ) : (
+          <>
+            <AddCircleOutline fontSize="large" color="primary" />
+            Schedule New Meeting
+          </>
+        )}
       </Typography>
 
       {error && (
@@ -501,7 +589,11 @@ export default function CreateMeeting() {
               {/* Attendees */}
               <Typography variant="h6" color="primary">
                 <Person sx={{ mr: 1, verticalAlign: 'middle' }} />
-                Attendees
+                Attendees {formData.selectedUsers.length === 0 && formData.selectedDepartments.length === 0 && (
+                  <Typography component="span" color="error" variant="caption">
+                    (Required - Add at least 1)
+                  </Typography>
+                )}
               </Typography>
 
               {/* Add Individual Users */}
@@ -543,7 +635,9 @@ export default function CreateMeeting() {
               {/* Selected Users */}
               {formData.selectedUsers.length > 0 && (
                 <Box>
-                  <Typography variant="subtitle2" gutterBottom>Selected Users:</Typography>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Selected Users ({formData.selectedUsers.length}):
+                  </Typography>
                   <Stack direction="row" flexWrap="wrap" gap={1}>
                     {formData.selectedUsers.map(user => (
                       <Chip
@@ -586,6 +680,13 @@ export default function CreateMeeting() {
                   ))}
                 </Select>
               </FormControl>
+
+              {formData.selectedDepartments.length > 0 && (
+                <Alert severity="info" icon={<Business />}>
+                  {formData.selectedDepartments.length} department(s) selected. 
+                  All members will be automatically added as attendees.
+                </Alert>
+              )}
 
               <Divider />
 
@@ -650,23 +751,33 @@ export default function CreateMeeting() {
                 </Stack>
               </Box>
 
-              {/* Submit */}
-              <Button
-                type="submit"
-                variant="contained"
-                size="large"
-                disabled={loading || (venueAvailability && !venueAvailability.available)}
-                sx={{ mt: 3 }}
-              >
-                {loading ? (
-                  <>
-                    <CircularProgress size={24} sx={{ mr: 1 }} color="inherit" />
-                    Creating Meeting...
-                  </>
-                ) : (
-                  'Schedule Meeting'
-                )}
-              </Button>
+              {/* Submit Buttons */}
+              <Stack direction="row" spacing={2} justifyContent="flex-end">
+                <Button
+                  variant="outlined"
+                  startIcon={<CancelIcon />}
+                  onClick={() => navigate('/')}
+                  disabled={saving}
+                >
+                  Cancel
+                </Button>
+                
+                <Button
+                  type="submit"
+                  variant="contained"
+                  size="large"
+                  disabled={saving || (venueAvailability && !venueAvailability.available)}
+                >
+                  {saving ? (
+                    <>
+                      <CircularProgress size={24} sx={{ mr: 1 }} color="inherit" />
+                      {isEditMode ? 'Updating...' : 'Creating...'}
+                    </>
+                  ) : (
+                    isEditMode ? 'Update Meeting' : 'Schedule Meeting'
+                  )}
+                </Button>
+              </Stack>
             </Stack>
           </form>
         </CardContent>

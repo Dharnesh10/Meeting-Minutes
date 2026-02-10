@@ -135,6 +135,98 @@ router.get('/rejected-cancelled', authMiddleware, async (req, res) => {
   }
 });
 
+// Add this to your server/routes/scheduledMeetings.js file
+// Place it BEFORE the /:id routes (around line 50-100)
+
+// Search users for meeting invitations - WITH CONFLICT DETECTION
+router.get('/search/users', authMiddleware, async (req, res) => {
+  try {
+    const { query } = req.query;
+
+    if (!query || query.length < 2) {
+      return res.status(400).send({ message: 'Search query must be at least 2 characters' });
+    }
+
+    // Search users by name, email, or faculty ID
+    const users = await User.find({
+      isActive: true,
+      $or: [
+        { firstName: { $regex: query, $options: 'i' } },
+        { lastName: { $regex: query, $options: 'i' } },
+        { email: { $regex: query, $options: 'i' } },
+        { facultyId: { $regex: query, $options: 'i' } }
+      ]
+    })
+      .populate('department', 'name code')
+      .select('firstName lastName email facultyId department role')
+      .limit(10);
+
+    res.status(200).send(users);
+  } catch (err) {
+    console.error('User search error:', err);
+    res.status(500).send({ message: 'Server error' });
+  }
+});
+
+// Check if users have conflicting meetings - NEW ENDPOINT
+router.post('/search/check-conflicts', authMiddleware, async (req, res) => {
+  try {
+    const { userIds, meetingStart, meetingEnd, excludeMeetingId } = req.body;
+
+    if (!userIds || !meetingStart || !meetingEnd) {
+      return res.status(400).send({ message: 'User IDs and meeting times are required' });
+    }
+
+    const start = new Date(meetingStart);
+    const end = new Date(meetingEnd);
+
+    // Find conflicting meetings for these users
+    const conflicts = {};
+
+    for (const userId of userIds) {
+      const query = {
+        status: { $in: ['pending_approval', 'approved'] },
+        $or: [
+          { createdBy: userId },
+          { 'attendees.user': userId }
+        ],
+        $or: [
+          { meeting_datetime: { $gte: start, $lt: end } },
+          { meeting_end_datetime: { $gt: start, $lte: end } },
+          { 
+            meeting_datetime: { $lte: start },
+            meeting_end_datetime: { $gte: end }
+          }
+        ]
+      };
+
+      if (excludeMeetingId) {
+        query._id = { $ne: excludeMeetingId };
+      }
+
+      const userConflicts = await ScheduledMeeting.find(query)
+        .select('meeting_name meetingid meeting_datetime')
+        .limit(1);
+
+      if (userConflicts.length > 0) {
+        conflicts[userId] = {
+          hasConflict: true,
+          meetingName: userConflicts[0].meeting_name,
+          meetingId: userConflicts[0].meetingid,
+          meetingTime: userConflicts[0].meeting_datetime
+        };
+      } else {
+        conflicts[userId] = { hasConflict: false };
+      }
+    }
+
+    res.status(200).send(conflicts);
+  } catch (err) {
+    console.error('Conflict check error:', err);
+    res.status(500).send({ message: 'Server error' });
+  }
+});
+
 // Get all meetings for logged-in user with filters
 router.get('/', authMiddleware, async (req, res) => {
   try {
@@ -355,6 +447,13 @@ router.post('/', authMiddleware, async (req, res) => {
       responseStatus: 'pending'
     }));
 
+    // Validation: At least one attendee required
+    if (formattedAttendees.length === 0) {
+      return res.status(400).send({ 
+        message: 'At least one attendee is required to create a meeting' 
+      });
+    }
+
     // Determine approver
     const department = await Department.findById(user.department._id);
     let approver = null;
@@ -469,6 +568,7 @@ router.post('/:id/complete', authMiddleware, async (req, res) => {
     res.status(500).send({ message: 'Server error' });
   }
 });
+
 
 // Update meeting - WITH CONFLICT CHECKING
 router.put('/:id', authMiddleware, async (req, res) => {
@@ -726,6 +826,39 @@ router.post('/:id/cancel', authMiddleware, async (req, res) => {
     });
   } catch (err) {
     console.error(err);
+    res.status(500).send({ message: 'Server error' });
+  }
+});
+
+// Delete meeting - ADD THIS IF MISSING
+router.delete('/:id', authMiddleware, async (req, res) => {
+  try {
+    const meeting = await ScheduledMeeting.findById(req.params.id);
+
+    if (!meeting) {
+      return res.status(404).send({ message: 'Meeting not found' });
+    }
+
+    // Only creator can delete
+    if (meeting.createdBy.toString() !== req.user.id) {
+      return res.status(403).send({ 
+        message: 'Only the meeting creator can delete it' 
+      });
+    }
+
+    // Cannot delete approved meetings
+    if (meeting.status === 'approved') {
+      return res.status(400).send({ 
+        message: 'Cannot delete approved meetings. Please cancel instead.' 
+      });
+    }
+
+    // Delete the meeting
+    await meeting.deleteOne();
+
+    res.status(200).send({ message: 'Meeting deleted successfully' });
+  } catch (err) {
+    console.error('Delete error:', err);
     res.status(500).send({ message: 'Server error' });
   }
 });

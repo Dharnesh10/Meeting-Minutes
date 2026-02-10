@@ -15,10 +15,10 @@ router.get('/', authMiddleware, async (req, res) => {
   }
 });
 
-// Check venue availability
+// Check venue availability - FIXED TO EXCLUDE CURRENT MEETING WHEN EDITING
 router.post('/check-availability', authMiddleware, async (req, res) => {
   try {
-    const { venueId, startTime, duration } = req.body;
+    const { venueId, startTime, duration, excludeMeetingId } = req.body; // ADDED: excludeMeetingId
 
     if (!venueId || !startTime || !duration) {
       return res.status(400).send({ message: 'Venue, start time, and duration are required' });
@@ -27,8 +27,8 @@ router.post('/check-availability', authMiddleware, async (req, res) => {
     const startDate = new Date(startTime);
     const endDate = new Date(startDate.getTime() + duration * 60000);
 
-    // Find conflicting meetings
-    const conflicts = await ScheduledMeeting.find({
+    // Build query to find conflicting meetings
+    const query = {
       venue: venueId,
       status: { $in: ['pending_approval', 'approved'] },
       $or: [
@@ -46,7 +46,16 @@ router.post('/check-availability', authMiddleware, async (req, res) => {
           meeting_end_datetime: { $gte: endDate }
         }
       ]
-    }).populate('createdBy', 'firstName lastName');
+    };
+
+    // CRITICAL FIX: Exclude the current meeting when editing
+    if (excludeMeetingId) {
+      query._id = { $ne: excludeMeetingId };
+    }
+
+    // Find conflicting meetings
+    const conflicts = await ScheduledMeeting.find(query)
+      .populate('createdBy', 'firstName lastName');
 
     if (conflicts.length > 0) {
       return res.status(200).send({

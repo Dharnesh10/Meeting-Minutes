@@ -56,6 +56,8 @@ import {
   Schedule,
   Info as InfoIcon
 } from '@mui/icons-material';
+import EndMeetingDialog from '../components/EndMeetingDialog';
+import { CallSplit } from '@mui/icons-material';
 
 function TabPanel({ children, value, index, ...other }) {
   return (
@@ -94,6 +96,7 @@ export default function MeetingDetails() {
   const [lastUpdate, setLastUpdate] = useState(null);
   const pollingInterval = useRef(null);
   const heartbeatInterval = useRef(null);
+  const [endDialogOpen, setEndDialogOpen] = useState(false);
 
   const token = localStorage.getItem('token');
   const currentUserId = localStorage.getItem('userId');
@@ -441,32 +444,48 @@ export default function MeetingDetails() {
     }
   };
 
-  const handleEndMeeting = async () => {
-    if (!window.confirm('End this meeting? Attendance will be finalized.')) return;
-
+  const handleEndMeeting = async (completionData) => {
     try {
       const res = await fetch(
-        `http://localhost:5000/api/minutes/${meetingId}/end`,
+        `http://localhost:5000/api/minutes/${meeting._id}/end`,
         {
           method: 'POST',
-          headers: { Authorization: `Bearer ${token}` }
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          }
         }
       );
 
-      const data = await res.json();
+      if (res.ok) {
+        if (completionData) {
+          await fetch(
+            `http://localhost:5000/api/meetings/${meeting._id}/complete`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`
+              },
+              body: JSON.stringify(completionData)
+            }
+          );
+        }
 
-      if (!res.ok) {
-        throw new Error(data.message);
+        setSuccess('Meeting ended successfully');
+        fetchMeeting();
+      } else {
+        const data = await res.json();
+        setError(data.message || 'Failed to end meeting');
       }
-
-      setSuccess('Meeting ended. Attendance finalized.');
-      setTimeout(() => setSuccess(''), 3000);
-      fetchAttendance(); // Refresh to show final percentages
-
     } catch (err) {
-      setError(err.message || 'Failed to end meeting');
-      setTimeout(() => setError(''), 5000);
+      console.error('End meeting error:', err);
+      setError('Failed to end meeting');
     }
+  };
+
+  const handleCreateFollowup = () => {
+    navigate(`/create-meeting?followup=${meeting._id}`);
   };
 
   const formatTime = (date) => {
@@ -583,8 +602,8 @@ export default function MeetingDetails() {
                 <Button
                   variant="contained"
                   color="error"
+                  onClick={() => setEndDialogOpen(true)}
                   startIcon={<Stop />}
-                  onClick={handleEndMeeting}
                 >
                   End Meeting
                 </Button>
@@ -979,6 +998,62 @@ export default function MeetingDetails() {
           }
         `}
       </style>
+
+      {/* End Meeting Dialog */}
+      <EndMeetingDialog
+        open={endDialogOpen}
+        onClose={() => setEndDialogOpen(false)}
+        onEnd={handleEndMeeting}
+        onCreateFollowup={handleCreateFollowup}
+        meetingName={meeting?.meeting_name}
+      />
+
+      {/* Related Meetings Section */}
+      {(meeting?.parentMeeting || meeting?.followupMeetings?.length > 0) && (
+        <Card sx={{ mt: 3 }}>
+          <CardContent>
+            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <CallSplit />
+              Related Meetings
+            </Typography>
+
+            {meeting?.parentMeeting && (
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  Parent Meeting:
+                </Typography>
+                <Chip
+                  label={meeting.parentMeeting.meeting_name}
+                  onClick={() => navigate(`/meeting-details?id=${meeting.parentMeeting._id}`)}
+                  icon={<CallSplit />}
+                  color="default"
+                  sx={{ cursor: 'pointer' }}
+                />
+              </Box>
+            )}
+
+            {meeting?.followupMeetings?.length > 0 && (
+              <Box>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  Follow-up Meetings:
+                </Typography>
+                <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+                  {meeting.followupMeetings.map(fm => (
+                    <Chip
+                      key={fm._id}
+                      label={`${fm.meeting_name} (${fm.status})`}
+                      onClick={() => navigate(`/meeting-details?id=${fm._id}`)}
+                      icon={<CallSplit />}
+                      color="primary"
+                      sx={{ cursor: 'pointer' }}
+                    />
+                  ))}
+                </Stack>
+              </Box>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </Box>
   );
 }

@@ -35,11 +35,16 @@ import {
   Edit,
   Cancel as CancelIcon
 } from '@mui/icons-material';
+import { useSearchParams } from 'react-router-dom';
+import { CallSplit } from '@mui/icons-material';
 
 export default function CreateMeeting() {
   const { id } = useParams(); // Get meeting ID from URL for edit mode
   const navigate = useNavigate();
   const isEditMode = !!id;
+  const [searchParams] = useSearchParams();
+  const followupMeetingId = searchParams.get('followup');
+  const isFollowupMode = !!followupMeetingId;
 
   const [formData, setFormData] = useState({
     meeting_name: '',
@@ -72,10 +77,12 @@ export default function CreateMeeting() {
 
   // Load existing meeting data if in edit mode
   useEffect(() => {
-    if (isEditMode) {
+    if (isFollowupMode) {
+      loadParentMeetingData();
+    } else if (isEditMode) {
       loadMeetingData();
     }
-  }, [id]);
+  }, [id, followupMeetingId]);
 
   // Fetch departments and venues on mount
   useEffect(() => {
@@ -150,6 +157,58 @@ export default function CreateMeeting() {
       setLoading(false);
     }
   };
+
+  const loadParentMeetingData = async () => {
+  try {
+    setLoading(true);
+    const res = await fetch(`http://localhost:5000/api/meetings/${followupMeetingId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    if (!res.ok) {
+      throw new Error('Failed to load parent meeting data');
+    }
+
+    const parentMeeting = await res.json();
+
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const formattedDate = tomorrow.toISOString().split('T')[0];
+
+    const meetingDateTime = new Date(parentMeeting.meeting_datetime);
+    const formattedTime = meetingDateTime.toTimeString().slice(0, 5);
+
+    setFormData({
+      meeting_name: `Follow-up: ${parentMeeting.meeting_name}`,
+      meeting_description: parentMeeting.meeting_description 
+        ? `Follow-up discussion: ${parentMeeting.meeting_description}` 
+        : 'Follow-up meeting to continue discussion',
+      meeting_date: formattedDate,
+      meeting_time: formattedTime,
+      meeting_duration: parentMeeting.meeting_duration,
+      venue: parentMeeting.venue?._id || '',
+      meetingType: parentMeeting.meetingType || 'internal',
+      priority: parentMeeting.priority || 'medium',
+      selectedUsers: parentMeeting.attendees?.map(a => ({
+        _id: a.user._id || a.user,
+        firstName: a.user.firstName || '',
+        lastName: a.user.lastName || '',
+        facultyId: a.user.facultyId || '',
+        email: a.user.email || '',
+        department: a.user.department || null,
+        role: a.user.role || ''
+      })) || [],
+      selectedDepartments: parentMeeting.departments?.map(d => d._id) || [],
+      agenda: []
+    });
+
+    setLoading(false);
+  } catch (err) {
+    console.error('Load parent meeting error:', err);
+    setError('Failed to load parent meeting data');
+    setLoading(false);
+  }
+};
 
   const fetchDepartments = async () => {
     try {
@@ -331,7 +390,9 @@ export default function CreateMeeting() {
         priority: formData.priority,
         attendees: formData.selectedUsers.map(u => u._id),
         departments: formData.selectedDepartments,
-        agenda: formData.agenda.filter(a => a.title)
+        agenda: formData.agenda.filter(a => a.title),
+        isFollowup: isFollowupMode,
+        parentMeetingId: followupMeetingId || null
       };
 
       const url = isEditMode 
@@ -363,16 +424,21 @@ export default function CreateMeeting() {
 
       if (isEditMode) {
         setSuccess('Meeting updated successfully!');
+      } else if (isFollowupMode) {
+        await fetch(`http://localhost:5000/api/minutes/${followupMeetingId}/end`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          }
+        });
+        
+        setSuccess('Follow-up meeting created! Parent meeting has been ended.');
       } else {
         if (data.requiresApproval) {
-          setSuccess(
-            `Meeting created successfully! Meeting ID: ${data.meeting.meetingid}. ` +
-            `It has been sent to your HOD for approval.`
-          );
+          setSuccess(`Meeting created successfully! Meeting ID: ${data.meeting.meetingid}. It has been sent to your HOD for approval.`);
         } else {
-          setSuccess(
-            `Meeting created and approved! Meeting ID: ${data.meeting.meetingid}`
-          );
+          setSuccess(`Meeting created and approved! Meeting ID: ${data.meeting.meetingid}`);
         }
       }
 
@@ -409,6 +475,12 @@ export default function CreateMeeting() {
             <Edit fontSize="large" color="primary" />
             Edit Meeting
           </>
+        ) : isFollowupMode ? (
+          <>
+            <CallSplit fontSize="large" color="primary" />
+            Create Follow-up Meeting
+            <Chip label="F" color="primary" size="small" sx={{ fontWeight: 'bold' }} />
+          </>
         ) : (
           <>
             <AddCircleOutline fontSize="large" color="primary" />
@@ -431,6 +503,13 @@ export default function CreateMeeting() {
 
       <Card>
         <CardContent>
+          {isFollowupMode && (
+            <Alert severity="info" sx={{ mb: 3 }} icon={<CallSplit />}>
+              <strong>Creating Follow-up Meeting</strong>
+              <br />
+              Data has been copied from the parent meeting. Adjust as needed.
+            </Alert>
+          )}
           <form onSubmit={handleSubmit}>
             <Stack spacing={3}>
               {/* Basic Details */}

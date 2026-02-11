@@ -444,9 +444,9 @@ export default function Home() {
               </Select>
             </FormControl>
           </Box>
-          <Button variant="outlined" color="error" onClick={handleLogout}>
+          {/* <Button variant="outlined" color="error" onClick={handleLogout}>
             Logout
-          </Button>
+          </Button> */}
         </Stack>
       </Box>
 
@@ -494,24 +494,6 @@ export default function Home() {
                 sx={{ position: 'absolute', top: 8, left: 8, zIndex: 1 }}
               />
 
-              {/* Follow-up Badge (F symbol) */}
-              {meeting.isFollowup && (
-                <Chip
-                  label="F"
-                  color="secondary"
-                  size="small"
-                  icon={<CallSplit />}
-                  sx={{ 
-                    position: 'absolute', 
-                    top: 8, 
-                    right: meeting.priority !== 'medium' ? 90 : 50, 
-                    zIndex: 1,
-                    minWidth: 32,
-                    height: 24
-                  }}
-                />
-              )}
-
               {/* Priority Badge */}
               {meeting.priority !== 'medium' && (
                 <Chip
@@ -550,12 +532,28 @@ export default function Home() {
                     {meeting.meeting_description.length > 100 && '...'}
                   </Typography>
                 )}
+                
 
-                <Chip
-                  label={meeting.meetingType?.replace('-', ' ').toUpperCase() || 'INTERNAL'}
-                  size="small"
-                  sx={{ mb: 2 }}
-                />
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                  <Chip
+                    label={meeting.meetingType?.replace('-', ' ').toUpperCase() || 'INTERNAL'}
+                    size="small"
+                  />
+
+                  {meeting.isFollowup && (
+                    <Chip
+                      label="F"
+                      color="primary"
+                      size="small"
+                      icon={<CallSplit />}
+                      sx={{
+                        minWidth: 32,
+                        height: 24
+                      }}
+                    />
+                  )}
+                </Box>
+
 
                 <Stack spacing={1.5}>
                   <Stack direction="row" spacing={1} alignItems="center">

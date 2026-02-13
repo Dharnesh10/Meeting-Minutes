@@ -28,7 +28,7 @@ import {
   Pending
 } from '@mui/icons-material';
 
-export default function PendingApprovals() {
+export default function PendingApprovals({ sidebarOpen = true }) {
   const navigate = useNavigate();
   const [meetings, setMeetings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -166,6 +166,12 @@ export default function PendingApprovals() {
       minute: '2-digit',
     });
 
+  const truncateWithReadMore = (text, limit = 120) => {
+    if (!text) return '';
+    if (text.length <= limit) return text;
+    return `${text.slice(0, limit).trim()}... (read more)`;
+  };
+
   return (
     <Box sx={{ p: 3, maxWidth: 1400, mx: 'auto' }}>
       {/* Header */}
@@ -201,102 +207,133 @@ export default function PendingApprovals() {
       )}
 
       {/* Meeting Cards */}
-      <Stack spacing={2}>
+      <Box
+        sx={{
+          display: 'grid',
+          gap: 3,
+          gridTemplateColumns: {
+            xs: '1fr',
+            sm: 'repeat(2, minmax(0, 1fr))',
+            md: sidebarOpen ? 'repeat(3, minmax(0, 1fr))' : 'repeat(4, minmax(0, 1fr))',
+          },
+        }}
+      >
         {loading ? (
           <Typography>Loading...</Typography>
         ) : meetings.length > 0 ? (
           meetings.map((meeting) => (
-            <Card key={meeting._id}>
-              <CardContent>
-                <Stack direction="row" spacing={2}>
-                  {/* Meeting Info */}
-                  <Box sx={{ flexGrow: 1 }}>
-                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-                      <Typography variant="h6" fontWeight="bold">
-                        {meeting.meeting_name}
+            <Card
+              key={meeting._id}
+              sx={{
+                height: '100%',
+                minHeight: { xs: 420, sm: 460, md: 520 },
+                borderRadius: 3,
+                boxShadow: 2,
+                transition: 'all 0.3s ease',
+                '&:hover': {
+                  transform: 'translateY(-6px)',
+                  boxShadow: 6,
+                },
+              }}
+            >
+              <CardContent sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1, flexWrap: 'wrap' }}>
+                  <Typography variant="h6" fontWeight="bold">
+                    {meeting.meeting_name}
+                  </Typography>
+                  <Chip label={`ID: ${meeting.meetingid}`} size="small" variant="outlined" />
+                  <Chip
+                    label={meeting.priority.toUpperCase()}
+                    size="small"
+                    color={
+                      meeting.priority === 'urgent' ? 'error' :
+                      meeting.priority === 'high' ? 'warning' : 'default'
+                    }
+                  />
+                </Stack>
+
+                {meeting.meeting_description && (
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{
+                      mb: 2,
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {truncateWithReadMore(meeting.meeting_description, 120)}
+                  </Typography>
+                )}
+
+                <Box sx={{ flex: 1, minHeight: 0 }}>
+                  <Stack spacing={1.5}>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Person fontSize="small" color="action" />
+                      <Typography variant="body2">
+                        <strong>Requested by:</strong> {meeting.createdBy?.firstName} {meeting.createdBy?.lastName} ({meeting.createdBy?.facultyId})
                       </Typography>
-                      <Chip label={`ID: ${meeting.meetingid}`} size="small" variant="outlined" />
-                      <Chip 
-                        label={meeting.priority.toUpperCase()} 
-                        size="small"
-                        color={
-                          meeting.priority === 'urgent' ? 'error' :
-                          meeting.priority === 'high' ? 'warning' : 'default'
-                        }
-                      />
                     </Stack>
 
-                    {meeting.meeting_description && (
-                      <Typography variant="body2" color="text.secondary" paragraph>
-                        {meeting.meeting_description}
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <CalendarToday fontSize="small" color="action" />
+                      <Typography variant="body2">
+                        <strong>Date:</strong> {formatDate(meeting.meeting_datetime)}
+                      </Typography>
+                    </Stack>
+
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Schedule fontSize="small" color="action" />
+                      <Typography variant="body2">
+                        <strong>Time:</strong> {formatTime(meeting.meeting_datetime)} ({meeting.meeting_duration} min)
+                      </Typography>
+                    </Stack>
+
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <MeetingRoom fontSize="small" color="action" />
+                      <Typography variant="body2">
+                        <strong>Venue:</strong> {meeting.venue?.name} ({meeting.venue?.code})
+                      </Typography>
+                    </Stack>
+
+                    {meeting.attendees && meeting.attendees.length > 0 && (
+                      <Typography variant="body2">
+                        <strong>Attendees:</strong> {meeting.attendees.length} people
                       </Typography>
                     )}
-
-                    <Stack spacing={1.5}>
-                      <Stack direction="row" spacing={1} alignItems="center">
-                        <Person fontSize="small" color="action" />
-                        <Typography variant="body2">
-                          <strong>Requested by:</strong> {meeting.createdBy?.firstName} {meeting.createdBy?.lastName} ({meeting.createdBy?.facultyId})
-                        </Typography>
-                      </Stack>
-
-                      <Stack direction="row" spacing={1} alignItems="center">
-                        <CalendarToday fontSize="small" color="action" />
-                        <Typography variant="body2">
-                          <strong>Date:</strong> {formatDate(meeting.meeting_datetime)}
-                        </Typography>
-                      </Stack>
-
-                      <Stack direction="row" spacing={1} alignItems="center">
-                        <Schedule fontSize="small" color="action" />
-                        <Typography variant="body2">
-                          <strong>Time:</strong> {formatTime(meeting.meeting_datetime)} ({meeting.meeting_duration} min)
-                        </Typography>
-                      </Stack>
-
-                      <Stack direction="row" spacing={1} alignItems="center">
-                        <MeetingRoom fontSize="small" color="action" />
-                        <Typography variant="body2">
-                          <strong>Venue:</strong> {meeting.venue?.name} ({meeting.venue?.code})
-                        </Typography>
-                      </Stack>
-
-                      {meeting.attendees && meeting.attendees.length > 0 && (
-                        <Typography variant="body2">
-                          <strong>Attendees:</strong> {meeting.attendees.length} people
-                        </Typography>
-                      )}
-                    </Stack>
-                  </Box>
-
-                  {/* Action Buttons */}
-                  <Stack spacing={1} sx={{ minWidth: 150 }}>
-                    <Button
-                      variant="contained"
-                      color="success"
-                      startIcon={<CheckCircle />}
-                      onClick={() => openApprovalDialog(meeting, 'approve')}
-                      fullWidth
-                    >
-                      Approve
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      color="error"
-                      startIcon={<Cancel />}
-                      onClick={() => openApprovalDialog(meeting, 'reject')}
-                      fullWidth
-                    >
-                      Reject
-                    </Button>
-                    <Button
-                      variant="text"
-                      size="small"
-                      onClick={() => navigate(`/meeting-details?id=${meeting._id}`)}
-                    >
-                      View Details
-                    </Button>
                   </Stack>
+                </Box>
+
+                <Divider sx={{ my: 2 }} />
+
+                <Stack spacing={1}>
+                  <Button
+                    variant="contained"
+                    color="success"
+                    startIcon={<CheckCircle />}
+                    onClick={() => openApprovalDialog(meeting, 'approve')}
+                    fullWidth
+                  >
+                    Approve
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    startIcon={<Cancel />}
+                    onClick={() => openApprovalDialog(meeting, 'reject')}
+                    fullWidth
+                  >
+                    Reject
+                  </Button>
+                  <Button
+                    variant="text"
+                    size="small"
+                    onClick={() => navigate(`/meeting-details?id=${meeting._id}`)}
+                  >
+                    View Details
+                  </Button>
                 </Stack>
               </CardContent>
             </Card>
@@ -311,7 +348,7 @@ export default function PendingApprovals() {
             </Typography>
           </Box>
         )}
-      </Stack>
+      </Box>
 
       {/* Approval Dialog */}
       <Dialog open={approvalDialog.open} onClose={closeApprovalDialog} maxWidth="sm" fullWidth>

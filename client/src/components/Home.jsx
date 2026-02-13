@@ -12,8 +12,6 @@ import {
   Alert,
   Chip,
   Button,
-  Tabs,
-  Tab,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -26,7 +24,8 @@ import {
   ListItemText,
   Select,
   FormControl,
-  InputLabel
+  InputLabel,
+  Divider
 } from '@mui/material';
 import {
   Person,
@@ -45,21 +44,21 @@ import {
   Info,
   Visibility,
   CallSplit,
-  FilterList
+  FilterList,
+  ExpandMore
 } from '@mui/icons-material';
 
-export default function Home() {
+// ACCEPT 'type' PROP TO DETERMINE WHICH MEETINGS TO SHOW
+export default function Home({ type = 'all' }) {
   const navigate = useNavigate();
   const [meetings, setMeetings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [currentTab, setCurrentTab] = useState(0);
   const [sortFilter, setSortFilter] = useState('all');
   const [userRole, setUserRole] = useState('');
   const [canApprove, setCanApprove] = useState(false);
   const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
-  
-  // Approval dialog state
+
   const [approvalDialog, setApprovalDialog] = useState({
     open: false,
     meeting: null,
@@ -68,37 +67,33 @@ export default function Home() {
   const [approvalComments, setApprovalComments] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
 
-  // Menu state
   const [menuAnchor, setMenuAnchor] = useState(null);
   const [selectedMeeting, setSelectedMeeting] = useState(null);
 
   const userName = localStorage.getItem('firstName') || 'User';
   const token = localStorage.getItem('token');
+  const [filterAnchor, setFilterAnchor] = useState(null);
 
+  // FETCH WHENEVER 'type' CHANGES (Route change)
   useEffect(() => {
     fetchUserInfo();
     fetchMeetings();
-  }, [currentTab, sortFilter]);
+  }, [type, sortFilter]);
 
-  // Poll for pending approval count every 30 seconds for HODs
   useEffect(() => {
     if (!canApprove) return;
-    
     const interval = setInterval(() => {
       fetchPendingApprovalCount();
     }, 30000);
-
     return () => clearInterval(interval);
   }, [canApprove]);
 
   const fetchUserInfo = async () => {
     if (!token) return;
-    
     try {
       const res = await fetch('http://localhost:5000/api/me', {
         headers: { Authorization: `Bearer ${token}` }
       });
-      
       if (res.ok) {
         const data = await res.json();
         setUserRole(data.role);
@@ -117,7 +112,6 @@ export default function Home() {
       const res = await fetch('http://localhost:5000/api/meetings/pending-count', {
         headers: { Authorization: `Bearer ${token}` }
       });
-      
       if (res.ok) {
         const data = await res.json();
         setPendingApprovalCount(data.count);
@@ -137,31 +131,28 @@ export default function Home() {
     try {
       let queryParams = '';
       
-      // Tab-based filtering
-      switch (currentTab) {
-        case 0: // Scheduled (Approved only)
-          queryParams = '?status=approved';
+      // LOGIC REPLACING THE TABS
+      switch (type) {
+        case 'scheduled':
+          // Scheduled typically means "Upcoming" or "Approved"
+          queryParams = '?status=approved'; 
           break;
-        case 1: // All Meetings
-          queryParams = '';
-          break;
-        case 2: // Completed
+        case 'completed':
           queryParams = '?status=completed';
           break;
+        case 'all':
         default:
-          queryParams = '';
+          queryParams = ''; // Fetch all
+          break;
       }
 
-      // Add sort filter
       if (sortFilter !== 'all') {
         queryParams += queryParams ? '&' : '?';
         queryParams += `filter=${sortFilter}`;
       }
 
       const res = await fetch(`http://localhost:5000/api/meetings${queryParams}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (res.status === 401) {
@@ -181,8 +172,18 @@ export default function Home() {
     }
   };
 
+  // Helper to get Page Title based on prop
+  const getPageTitle = () => {
+    switch(type) {
+      case 'scheduled': return 'Scheduled Meetings';
+      case 'completed': return 'Completed Meetings';
+      default: return 'All Meetings';
+    }
+  }
+
+  // ... (Keep handleCardClick, handleEdit, handleDelete, handleCancel, Approvals, formatDate, formatTime, getStatusColor, getStatusLabel, getPriorityColor, handleMenuOpen, handleMenuClose exactly as before) ...
+
   const handleCardClick = (meetingId, event) => {
-    // Prevent navigation if clicking on buttons or menu
     if (
       event.target.closest('button') ||
       event.target.closest('.MuiIconButton-root') ||
@@ -190,35 +191,25 @@ export default function Home() {
     ) {
       return;
     }
-
     navigate(`/meeting-details?id=${meetingId}`);
   };
 
   const handleEdit = (meeting, event) => {
     event.stopPropagation();
-    // FIXED: Navigate to edit-meeting route with meeting ID
     navigate(`/edit-meeting/${meeting._id}`);
   };
 
   const handleDelete = async (meeting, event) => {
     event.stopPropagation();
-    
-    if (!window.confirm('Are you sure you want to delete this meeting?')) {
-      return;
-    }
-
+    if (!window.confirm('Are you sure you want to delete this meeting?')) return;
     try {
       const res = await fetch(`http://localhost:5000/api/meetings/${meeting._id}`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
-
       if (res.ok) {
         setMeetings(meetings.filter(m => m._id !== meeting._id));
         setError('');
-        // Close menu if open
         handleMenuClose();
       } else {
         const data = await res.json();
@@ -232,10 +223,8 @@ export default function Home() {
 
   const handleCancel = async (meeting, event) => {
     event.stopPropagation();
-    
     const reason = prompt('Please provide a reason for cancellation:');
     if (!reason) return;
-
     try {
       const res = await fetch(`http://localhost:5000/api/meetings/${meeting._id}/cancel`, {
         method: 'POST',
@@ -245,7 +234,6 @@ export default function Home() {
         },
         body: JSON.stringify({ reason })
       });
-
       if (res.ok) {
         fetchMeetings();
         handleMenuClose();
@@ -283,7 +271,6 @@ export default function Home() {
           body: JSON.stringify({ comments: approvalComments })
         }
       );
-
       if (res.ok) {
         fetchMeetings();
         fetchPendingApprovalCount();
@@ -303,7 +290,6 @@ export default function Home() {
       setError('Please provide a reason for rejection');
       return;
     }
-
     try {
       const res = await fetch(
         `http://localhost:5000/api/meetings/${approvalDialog.meeting._id}/reject`,
@@ -316,7 +302,6 @@ export default function Home() {
           body: JSON.stringify({ reason: rejectionReason })
         }
       );
-
       if (res.ok) {
         fetchMeetings();
         fetchPendingApprovalCount();
@@ -333,16 +318,12 @@ export default function Home() {
 
   const formatDate = (dt) =>
     new Date(dt).toLocaleDateString('en-US', {
-      weekday: 'short',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
+      weekday: 'short', year: 'numeric', month: 'short', day: 'numeric'
     });
 
   const formatTime = (dt) =>
     new Date(dt).toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
+      hour: '2-digit', minute: '2-digit',
     });
 
   const getStatusColor = (status) => {
@@ -388,22 +369,24 @@ export default function Home() {
     setSelectedMeeting(null);
   };
 
-  const handleLogout = () => {
-    localStorage.clear();
-    window.location.href = '/login';
-  };
-
   return (
-    <Box sx={{ pl: { xs: 2, md: 10 }, pr: 2, pt: 3 }}>
+    <Box sx={{ width: '100%' }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, mb: 3, gap: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Typography variant="h5" fontWeight="bold">
-            Welcome, {userName}!
-          </Typography>
+          {/* If looking at All Meetings, say Welcome. If sub-page, show Title */}
+          {type === 'all' ? (
+            <Typography variant="h5" fontWeight="bold">
+              Welcome, {userName}!
+            </Typography>
+          ) : (
+            <Typography variant="h5" fontWeight="bold">
+              {getPageTitle()}
+            </Typography>
+          )}
+          
           {userRole && <Chip label={userRole} size="small" color="primary" />}
           
-          {/* Pending Approval Badge - Always visible for HODs */}
           {canApprove && (
             <Tooltip title="Pending approvals">
               <Badge badgeContent={pendingApprovalCount ? pendingApprovalCount : "0"} color="error">
@@ -419,34 +402,51 @@ export default function Home() {
           )}
         </Box>
         
-        <Stack direction="row" spacing={1}>
+        <Stack direction="row" spacing={1} sx={{ width: { xs: '100%', sm: 'auto' }, justifyContent: { xs: 'space-between', sm: 'flex-end' } }}>
           <Tooltip title="Refresh meetings">
             <IconButton onClick={fetchMeetings} color="primary">
               <Refresh />
             </IconButton>
           </Tooltip>
-          {/* Sort/Filter */}
-          <Box sx={{ mb: 3 }}>
-            <FormControl size="small" sx={{ minWidth: 200 }}>
-              <InputLabel>Filter By</InputLabel>
-              <Select
-                value={sortFilter}
-                label="Filter By"
-                onChange={(e) => setSortFilter(e.target.value)}
-                startAdornment={<FilterList sx={{ mr: 1 }} />}
-              >
-                <MenuItem value="all">All Meetings</MenuItem>
-                <MenuItem value="created">Created by Me</MenuItem>
-                <MenuItem value="department">Department Meetings</MenuItem>
-                <MenuItem value="followup">Follow-up Meetings</MenuItem>
-                <MenuItem value="high_priority">High Priority</MenuItem>
-                <MenuItem value="this_week">This Week</MenuItem>
-              </Select>
-            </FormControl>
+          
+          <Box>
+            <Button
+              variant="text"
+              startIcon={<FilterList />}
+              endIcon={<ExpandMore fontSize="small" />}
+              onClick={(e) => setFilterAnchor(e.currentTarget)} // You need to add this state
+              sx={{ 
+                color: 'text.secondary',
+                textTransform: 'none',
+                fontWeight: 600,
+                '&:hover': { bgcolor: 'transparent', color: 'primary.main' }
+              }}
+            >
+              {/* Map value to label for display */}
+              {sortFilter === 'all' ? 'Filter' : 
+              sortFilter === 'created' ? 'My Meetings' : 
+              sortFilter.replace('_', ' ')}
+            </Button>
+            
+            <Menu
+              anchorEl={filterAnchor} // Add state: const [filterAnchor, setFilterAnchor] = useState(null);
+              open={Boolean(filterAnchor)}
+              onClose={() => setFilterAnchor(null)}
+              PaperProps={{
+                sx: { mt: 1, minWidth: 180, borderRadius: 1, boxShadow: 3 }
+              }}
+            >
+              <MenuItem onClick={() => { setSortFilter('all'); setFilterAnchor(null); }} selected={sortFilter === 'all'}>
+                All Meetings
+              </MenuItem>
+              <Divider sx={{ my: 0.5 }} />
+              <MenuItem onClick={() => { setSortFilter('created'); setFilterAnchor(null); }}>Created by Me</MenuItem>
+              <MenuItem onClick={() => { setSortFilter('department'); setFilterAnchor(null); }}>Department</MenuItem>
+              <MenuItem onClick={() => { setSortFilter('followup'); setFilterAnchor(null); }}>Follow-up</MenuItem>
+              <MenuItem onClick={() => { setSortFilter('high_priority'); setFilterAnchor(null); }}>High Priority</MenuItem>
+              <MenuItem onClick={() => { setSortFilter('this_week'); setFilterAnchor(null); }}>This Week</MenuItem>
+            </Menu>
           </Box>
-          {/* <Button variant="outlined" color="error" onClick={handleLogout}>
-            Logout
-          </Button> */}
         </Stack>
       </Box>
 
@@ -456,18 +456,8 @@ export default function Home() {
         </Alert>
       )}
 
-      {/* Tabs */}
-      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
-        <Tabs value={currentTab} onChange={(e, v) => setCurrentTab(v)}>
-          <Tab label="Scheduled" />
-          <Tab label="All Meetings" />
-          <Tab label="Completed" />
-        </Tabs>
-      </Box>
-
-
       {/* Meeting Cards */}
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: { xs: 'center', sm: 'flex-start' } }}>
         {loading ? (
           <Typography>Loading meetings...</Typography>
         ) : meetings.length > 0 ? (
@@ -475,26 +465,28 @@ export default function Home() {
             <Card 
               key={meeting._id} 
               sx={{ 
-                width: 360, 
+                width: { xs: '100%', sm: 360 },
                 position: 'relative',
                 cursor: 'pointer',
                 transition: 'all 0.3s ease',
-                '&:hover': {
-                  transform: 'translateY(-8px)',
-                  boxShadow: 6
-                }
+                '&:hover': { transform: 'translateY(-8px)', boxShadow: 6 }
               }}
               onClick={(e) => handleCardClick(meeting._id, e)}
             >
-              {/* Status Badge */}
               <Chip
                 label={getStatusLabel(meeting.status)}
                 color={getStatusColor(meeting.status)}
                 size="small"
-                sx={{ position: 'absolute', top: 8, left: 8, zIndex: 1 }}
+                sx={{ 
+                  position: 'absolute', 
+                  top: 8, 
+                  left: 8, 
+                  zIndex: 1,
+                  color: 'white', // This forces the text color to white
+                  // Optional: if the icon is also looking dark, add this:
+                  '& .MuiChip-icon': { color: 'white' } 
+                }}
               />
-
-              {/* Priority Badge */}
               {meeting.priority !== 'medium' && (
                 <Chip
                   label={meeting.priority.toUpperCase()}
@@ -503,8 +495,6 @@ export default function Home() {
                   sx={{ position: 'absolute', top: 8, right: 50, zIndex: 1 }}
                 />
               )}
-
-              {/* Menu */}
               <IconButton
                 sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}
                 onClick={(e) => handleMenuOpen(e, meeting)}
@@ -517,7 +507,14 @@ export default function Home() {
                 height="140"
                 image="/meeting.png"
                 alt="Meeting"
-                sx={{ objectFit: 'cover' }}
+                sx={{
+                  width: '90%',        // Makes it smaller (90% of card width)
+                  height: 210,        // Fixed height
+                  marginTop: '25px',   // Adds spacing top
+                  marginX: 'auto',    // Centers the image horizontally
+                  borderRadius: 2,     // rounds the corners of the image
+                  objectFit: 'cover'   // keeps the image looking good
+                }}
               />
 
               <CardContent>
@@ -532,28 +529,22 @@ export default function Home() {
                     {meeting.meeting_description.length > 100 && '...'}
                   </Typography>
                 )}
-                
 
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                   <Chip
                     label={meeting.meetingType?.replace('-', ' ').toUpperCase() || 'INTERNAL'}
                     size="small"
                   />
-
                   {meeting.isFollowup && (
                     <Chip
                       label="F"
                       color="primary"
                       size="small"
                       icon={<CallSplit />}
-                      sx={{
-                        minWidth: 32,
-                        height: 24
-                      }}
+                      sx={{ minWidth: 32, height: 24 }}
                     />
                   )}
                 </Box>
-
 
                 <Stack spacing={1.5}>
                   <Stack direction="row" spacing={1} alignItems="center">
@@ -562,144 +553,71 @@ export default function Home() {
                       <Typography variant="body2" component="span">
                         {meeting.createdBy?.firstName} {meeting.createdBy?.lastName}
                       </Typography>
-                      <Chip 
-                        label={meeting.createdBy?.facultyId} 
-                        size="small" 
-                        sx={{ height: 18 }}
-                      />
+                      <Chip label={meeting.createdBy?.facultyId} size="small" sx={{ height: 18 }} />
                     </Box>
                   </Stack>
-
                   <Stack direction="row" spacing={1} alignItems="center">
                     <CalendarToday fontSize="small" color="action" />
-                    <Typography variant="body2">
-                      {formatDate(meeting.meeting_datetime)}
-                    </Typography>
+                    <Typography variant="body2">{formatDate(meeting.meeting_datetime)}</Typography>
                   </Stack>
-
                   <Stack direction="row" spacing={1} alignItems="center">
                     <Schedule fontSize="small" color="action" />
-                    <Typography variant="body2">
-                      {formatTime(meeting.meeting_datetime)} ({meeting.meeting_duration} min)
-                    </Typography>
+                    <Typography variant="body2">{formatTime(meeting.meeting_datetime)} ({meeting.meeting_duration} min)</Typography>
                   </Stack>
-
                   <Stack direction="row" spacing={1} alignItems="center">
                     <MeetingRoom fontSize="small" color="action" />
-                    <Typography variant="body2">
-                      {meeting.venue?.name} ({meeting.venue?.code})
-                    </Typography>
+                    <Typography variant="body2">{meeting.venue?.name} ({meeting.venue?.code})</Typography>
                   </Stack>
-
-                  {meeting.attendees && meeting.attendees.length > 0 && (
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <People fontSize="small" color="action" />
-                      <Typography variant="body2">
-                        {meeting.attendees.length} attendee{meeting.attendees.length !== 1 ? 's' : ''}
-                      </Typography>
-                    </Stack>
-                  )}
-
                   {meeting.departments && meeting.departments.length > 0 && (
                     <Stack direction="row" spacing={1} alignItems="center">
                       <Business fontSize="small" color="action" />
                       <Box>
                         {meeting.departments.map(dept => (
-                          <Chip 
-                            key={dept._id}
-                            label={dept.code}
-                            size="small"
-                            sx={{ mr: 0.5, height: 18 }}
-                          />
+                          <Chip key={dept._id} label={dept.code} size="small" sx={{ mr: 0.5, height: 18 }} />
                         ))}
                       </Box>
                     </Stack>
                   )}
-
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <Info fontSize="small" color="action" />
-                    <Typography variant="caption" color="text.secondary">
-                      ID: <strong>{meeting.meetingid}</strong>
-                    </Typography>
-                  </Stack>
-
                   {meeting.status === 'pending_approval' && meeting.approver && canApprove && (
                     <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
-                      <Button
-                        size="small"
-                        variant="contained"
-                        color="success"
-                        startIcon={<CheckCircle />}
-                        onClick={(e) => openApprovalDialog(meeting, 'approve', e)}
-                        fullWidth
-                      >
-                        Approve
-                      </Button>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        color="error"
-                        startIcon={<Cancel />}
-                        onClick={(e) => openApprovalDialog(meeting, 'reject', e)}
-                        fullWidth
-                      >
-                        Reject
-                      </Button>
+                      <Button size="small" variant="contained" color="success" startIcon={<CheckCircle />} onClick={(e) => openApprovalDialog(meeting, 'approve', e)} fullWidth>Approve</Button>
+                      <Button size="small" variant="outlined" color="error" startIcon={<Cancel />} onClick={(e) => openApprovalDialog(meeting, 'reject', e)} fullWidth>Reject</Button>
                     </Stack>
                   )}
-
-                  <Button
-                    size="small"
-                    variant="text"
-                    startIcon={<Visibility />}
-                    sx={{ mt: 1 }}
-                  >
-                    Click to view details
-                  </Button>
                 </Stack>
               </CardContent>
             </Card>
           ))
         ) : (
           <Box sx={{ textAlign: 'center', width: '100%', py: 5 }}>
-            <Typography variant="h6" color="text.secondary">
-              No meetings found
-            </Typography>
+            <Typography variant="h6" color="text.secondary">No meetings found</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              {currentTab === 2 ? 'No completed meetings yet' : 'Create your first meeting to get started!'}
+              {type === 'completed' ? 'No completed meetings yet' : 
+               type === 'scheduled' ? 'No upcoming scheduled meetings' : 
+               'Create your first meeting to get started!'}
             </Typography>
           </Box>
         )}
       </Box>
 
       {/* Action Menu */}
-      <Menu
-        anchorEl={menuAnchor}
-        open={Boolean(menuAnchor)}
-        onClose={handleMenuClose}
-      >
-        <MenuItem onClick={() => { 
-          navigate(`/meeting-details?id=${selectedMeeting?._id}`);
-          handleMenuClose();
-        }}>
+      <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={handleMenuClose}>
+        <MenuItem onClick={() => { navigate(`/meeting-details?id=${selectedMeeting?._id}`); handleMenuClose(); }}>
           <ListItemIcon><Visibility fontSize="small" /></ListItemIcon>
           <ListItemText>View Details</ListItemText>
         </MenuItem>
-        
         {selectedMeeting?.status === 'pending_approval' && (
           <MenuItem onClick={(e) => handleEdit(selectedMeeting, e)}>
             <ListItemIcon><Edit fontSize="small" /></ListItemIcon>
             <ListItemText>Edit</ListItemText>
           </MenuItem>
         )}
-
-        {selectedMeeting?.status === 'approved' && (
+        {selectedMeeting?.status === 'approved' && (!userRole === 'HOD') && (
           <MenuItem onClick={(e) => handleCancel(selectedMeeting, e)}>
             <ListItemIcon><Cancel fontSize="small" color="error" /></ListItemIcon>
             <ListItemText>Cancel Meeting</ListItemText>
           </MenuItem>
         )}
-
         {selectedMeeting?.status === 'pending_approval' && (
           <MenuItem onClick={(e) => handleDelete(selectedMeeting, e)}>
             <ListItemIcon><Delete fontSize="small" color="error" /></ListItemIcon>
@@ -710,55 +628,17 @@ export default function Home() {
 
       {/* Approval Dialog */}
       <Dialog open={approvalDialog.open} onClose={closeApprovalDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          {approvalDialog.action === 'approve' ? 'Approve Meeting' : 'Reject Meeting'}
-        </DialogTitle>
+        <DialogTitle>{approvalDialog.action === 'approve' ? 'Approve Meeting' : 'Reject Meeting'}</DialogTitle>
         <DialogContent>
-          {approvalDialog.meeting && (
-            <Box sx={{ mb: 2 }}>
-              <Typography variant="subtitle1" fontWeight="bold">
-                {approvalDialog.meeting.meeting_name}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Requested by: {approvalDialog.meeting.createdBy?.firstName} {approvalDialog.meeting.createdBy?.lastName}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Date: {formatDate(approvalDialog.meeting.meeting_datetime)} at {formatTime(approvalDialog.meeting.meeting_datetime)}
-              </Typography>
-            </Box>
-          )}
-
-          {approvalDialog.action === 'approve' ? (
-            <TextField
-              fullWidth
-              multiline
-              rows={3}
-              label="Comments (Optional)"
-              value={approvalComments}
-              onChange={(e) => setApprovalComments(e.target.value)}
-              placeholder="Add any comments or notes..."
-            />
+           {approvalDialog.action === 'approve' ? (
+            <TextField fullWidth multiline rows={3} label="Comments (Optional)" value={approvalComments} onChange={(e) => setApprovalComments(e.target.value)} sx={{ mt: 2 }} />
           ) : (
-            <TextField
-              fullWidth
-              multiline
-              rows={3}
-              label="Reason for Rejection"
-              value={rejectionReason}
-              onChange={(e) => setRejectionReason(e.target.value)}
-              placeholder="Please provide a reason for rejection..."
-              required
-              error={!rejectionReason.trim() && approvalDialog.action === 'reject'}
-            />
+            <TextField fullWidth multiline rows={3} label="Reason for Rejection" value={rejectionReason} onChange={(e) => setRejectionReason(e.target.value)} required error={!rejectionReason.trim() && approvalDialog.action === 'reject'} sx={{ mt: 2 }} />
           )}
         </DialogContent>
         <DialogActions>
           <Button onClick={closeApprovalDialog}>Cancel</Button>
-          <Button
-            onClick={approvalDialog.action === 'approve' ? handleApprove : handleReject}
-            variant="contained"
-            color={approvalDialog.action === 'approve' ? 'success' : 'error'}
-          >
+          <Button onClick={approvalDialog.action === 'approve' ? handleApprove : handleReject} variant="contained" color={approvalDialog.action === 'approve' ? 'success' : 'error'}>
             {approvalDialog.action === 'approve' ? 'Approve' : 'Reject'}
           </Button>
         </DialogActions>

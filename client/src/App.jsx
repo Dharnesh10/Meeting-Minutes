@@ -1,98 +1,134 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Outlet, Navigate } from 'react-router-dom';
-import Sidebar from './components/Sidebar.jsx';
-import Navbar from './components/Navbar.jsx';
-import ThemeProvider from './components/ThemeProvider.jsx';
-import Home from './components/Home.jsx';
-import Login from './components/Login.jsx';
-import Signup from './components/SignUp.jsx';
-import Tasks from './pages/Mytasks.jsx';
-import AssignedTasks from './pages/AssignedTasks.jsx';
-import MeetingDetails from './pages/MeetingDetails.jsx';
-import Minutes from './pages/Minutes.jsx';
-import MyCalendar from './components/Calendar.jsx';
-import CreateMeeting from './pages/CreateMeeting.jsx';
-import RejectedMeetings from './pages/RejectedMeetings.jsx';
-import PendingApprovals from './pages/PendingApprovals.jsx';
+import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { Box, useMediaQuery, CssBaseline } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
+import ThemeProvider, { useThemeToggle } from './components/ThemeProvider';
+import Sidebar from './components/Sidebar';
+import Navbar from './components/Navbar';
+import Home from './components/Home';
+import CreateMeeting from './pages/CreateMeeting';
+import MeetingDetails from './pages/MeetingDetails';
+import Tasks from './pages/Tasks';
+import RejectedMeetings from './pages/RejectedMeetings';
+import Calendar from './components/Calendar';
+import Login from './components/Login'; // Ensure this component exists
+import './App.css';
 
-function Layout() {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+function AppContent() {
+  const theme = useTheme();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  
+  // Sidebar state
+  const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
+  const { toggleTheme, mode } = useThemeToggle();
+
+  const token = localStorage.getItem('token');
+  const isLoginPage = location.pathname === '/login';
+
+  // 1. Auth Guard: Redirect to login if no token is found
+  useEffect(() => {
+    if (!token && !isLoginPage) {
+      navigate('/login');
+    }
+    // If user is already logged in and tries to go to /login, send them home
+    if (token && isLoginPage) {
+      navigate('/');
+    }
+  }, [token, navigate, isLoginPage]);
+
+  // 2. Responsive Sidebar: Auto-close on mobile
+  useEffect(() => {
+    if (isMobile) {
+      setSidebarOpen(false);
+    } else {
+      setSidebarOpen(true);
+    }
+  }, [isMobile]);
+
+  // 3. Layout Logic: If it's the login page, don't show Sidebar or Navbar
+  if (isLoginPage) {
+    return (
+      <Routes>
+        <Route path="/login" element={<Login />} />
+      </Routes>
+    );
+  }
 
   return (
-    <div style={{ display: 'flex' }}>
+    <Box sx={{ display: 'flex', minHeight: '100vh', overflow: 'hidden' }}>
+      <CssBaseline />
+      
+      {/* Sidebar handles its own responsive variants */}
       <Sidebar open={sidebarOpen} setOpen={setSidebarOpen} />
-      <div style={{ flexGrow: 1 }}>
-        <Navbar sidebarOpen={sidebarOpen} />
-        <div style={{ marginTop: 64, padding: 20 }}>
-          <Outlet />
-        </div>
-      </div>
-    </div>
+      
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          minWidth: 0,
+          minHeight: '100vh',
+          backgroundColor: 'background.default',
+          display: 'flex',
+          flexDirection: 'column',
+          transition: theme.transitions.create(['margin', 'width'], {
+            easing: theme.transitions.easing.sharp,
+            duration: theme.transitions.duration.enteringScreen,
+          }),
+        }}
+      >
+        <Navbar 
+          sidebarOpen={sidebarOpen} 
+          toggleTheme={toggleTheme}
+          themeMode={mode}
+          isMobile={isMobile}
+        />
+        
+        <Box
+          sx={{
+            flexGrow: 1,
+            pt: { xs: 10, md: 14 }, // Space for fixed Navbar
+            px: { 
+              xs: 2, 
+              md: sidebarOpen ? 3 : 18 // Dynamic padding requested
+            },
+            pb: 3,
+            overflowY: 'auto',
+            transition: theme.transitions.create(['padding'], {
+              easing: theme.transitions.easing.sharp,
+              duration: theme.transitions.duration.enteringScreen,
+            }),
+          }}
+        >
+          <Routes>
+            {/* Authenticated Routes */}
+            <Route path="/" element={<Home type="all" />} />
+            <Route path="/my-meetings/scheduled" element={<Home type="scheduled" />} />
+            <Route path="/my-meetings/completed" element={<Home type="completed" />} />
+            
+            <Route path="/create-meeting" element={<CreateMeeting />} />
+            <Route path="/edit-meeting/:id" element={<CreateMeeting />} />
+            <Route path="/meeting-details" element={<MeetingDetails />} />
+            <Route path="/tasks" element={<Tasks />} />
+            <Route path="/rejected-meetings" element={<RejectedMeetings />} />
+            <Route path="/calendar" element={<Calendar />} />
+            
+            {/* Catch-all to redirect back home if path doesn't exist */}
+            <Route path="*" element={<Home type="all" />} />
+          </Routes>
+        </Box>
+      </Box>
+    </Box>
   );
 }
 
-function PrivateRoute({ children }) {
-  const isLoggedIn = !!localStorage.getItem('token');
-  return isLoggedIn ? children : <Navigate to='/login' />;
-}
-
-function LogoutRoute() {
-  useEffect(() => {
-    localStorage.clear();
-    window.location.href = '/login';
-  }, []);
-
-  return null;
-}
-
 export default function App() {
-  // Store user ID in localStorage when logged in
-  useEffect(() => {
-    const fetchUserId = async () => {
-      const token = localStorage.getItem('token');
-      if (token && !localStorage.getItem('userId')) {
-        try {
-          const res = await fetch('http://localhost:5000/api/me', {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          if (res.ok) {
-            const data = await res.json();
-            localStorage.setItem('userId', data._id);
-          }
-        } catch (err) {
-          console.error('Failed to fetch user ID:', err);
-        }
-      }
-    };
-    fetchUserId();
-  }, []);
-
   return (
     <ThemeProvider>
-      <Router>
-        <Routes>
-          <Route element={<PrivateRoute><Layout /></PrivateRoute>}>
-            <Route path="/" element={<Home />} />
-            <Route path="/tasks" element={<Tasks />} />
-            <Route path="/create-meeting" element={<CreateMeeting />} />
-            <Route path="/edit-meeting/:id" element={<CreateMeeting />} /> {/* ADDED: Edit route */}
-            <Route path="/assigned-tasks" element={<AssignedTasks />} />
-            <Route path="/meeting-details" element={<MeetingDetails />} />
-            <Route path="/minutes" element={<Minutes />} />
-            <Route path="/calendar" element={<MyCalendar />} />
-            <Route path="/rejected-meetings" element={<RejectedMeetings />} />
-            <Route path="/pending-approvals" element={<PendingApprovals />} />
-          </Route>
-          
-          {/* Auth routes */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/logout" element={<LogoutRoute />} />
-          
-          {/* Catch all */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Router>
+      <BrowserRouter>
+        <AppContent />
+      </BrowserRouter>
     </ThemeProvider>
   );
 }

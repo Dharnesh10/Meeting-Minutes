@@ -4,6 +4,7 @@ const { ScheduledMeeting } = require('../models/scheduledMeeting');
 const { User } = require('../models/user');
 const { Department } = require('../models/department');
 const { Venue } = require('../models/venue');
+const Notification = require('../models/notification');
 
 // Generate unique meeting ID
 async function generateUniqueMeetingId() {
@@ -333,6 +334,9 @@ router.get('/:id', authMiddleware, async (req, res) => {
 });
 
 // Create scheduled meeting - WITH ATTENDEE CONFLICT CHECKING
+// FIXED CREATE MEETING ROUTE
+// Replace your entire router.post('/', ...) route with this
+
 router.post('/', authMiddleware, async (req, res) => {
   try {
     const {
@@ -419,7 +423,7 @@ router.post('/', authMiddleware, async (req, res) => {
 
     if (creatorConflicts.length > 0) {
       return res.status(400).send({
-        message: 'You cannot create this meeting because you have a conflicting meeting or Your attendees have conflicting meetings at this time!',
+        message: 'You cannot create this meeting because you have a conflicting meeting at this time!',
         conflictType: 'creator',
         conflicts: creatorConflicts[0].conflictingMeetings
       });
@@ -504,13 +508,29 @@ router.post('/', authMiddleware, async (req, res) => {
       });
     }
 
+    // Populate meeting for response and notifications
     await meeting.populate('createdBy', 'firstName lastName email');
     await meeting.populate('venue', 'name code');
     await meeting.populate('attendees.user', 'firstName lastName email');
     await meeting.populate('departments', 'name code');
     await meeting.populate('approver', 'firstName lastName email');
 
-    res.status(201).send({
+    // ⭐ SEND NOTIFICATIONS (before response)
+    try {
+      await Notification.notifyAttendees(
+        meeting,
+        'meeting_scheduled',
+        req.user,
+        req.user.id
+      );
+      console.log('✅ Notifications sent successfully');
+    } catch (notifError) {
+      console.error('❌ Failed to send notifications:', notifError);
+      // Continue - don't fail the request if notifications fail
+    }
+
+    // ✅ SEND ONLY ONE RESPONSE
+    return res.status(201).send({
       message: status === 'pending_approval' 
         ? 'Meeting created and sent for approval' 
         : 'Meeting created successfully',
@@ -519,9 +539,10 @@ router.post('/', authMiddleware, async (req, res) => {
       totalAttendees: formattedAttendees.length,
       isFollowup: isFollowup || false
     });
-  } catch (err) {
-    console.error('Create meeting error:', err);
-    res.status(500).send({ message: 'Server error', error: err.message });
+
+  } catch (error) {
+    console.error('Create meeting error:', error);
+    return res.status(500).send({ message: 'Failed to create meeting' });
   }
 });
 
@@ -699,134 +720,145 @@ router.put('/:id', authMiddleware, async (req, res) => {
 // Approve meeting
 router.post('/:id/approve', authMiddleware, async (req, res) => {
   try {
-    const meeting = await ScheduledMeeting.findById(req.params.id);
+    const { comments } = req.body;
+    
+    const meeting = await ScheduledMeeting.findById(req.params.id)
+      .populate('createdBy', 'firstName lastName');
 
     if (!meeting) {
-      return res.status(404).send({ message: 'Meeting not found' });
+      return res.status(404).json({ message: 'Meeting not found' });
     }
 
-    const user = await User.findById(req.user.id);
-
-    if (!user.canApproveMeetings) {
-      return res.status(403).send({ message: 'You do not have permission to approve meetings' });
+    // Check if user can approve
+    if (!req.user.canApproveMeetings) {
+      return res.status(403).json({ message: 'You do not have permission to approve meetings' });
     }
-
-    if (meeting.approver && meeting.approver.toString() !== req.user.id) {
-      return res.status(403).send({ message: 'You are not the designated approver for this meeting' });
-    }
-
-    if (meeting.status !== 'pending_approval') {
-      return res.status(400).send({ message: 'Meeting is not pending approval' });
-    }
-
-    const { comments } = req.body;
 
     meeting.status = 'approved';
+    meeting.approver = req.user.id; // ⭐ FIX
     meeting.approvalDate = new Date();
     meeting.approvalComments = comments;
-
     await meeting.save();
 
-    res.status(200).send({
-      message: 'Meeting approved successfully',
-      meeting
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).send({ message: 'Server error' });
+    // Notify creator
+    try {
+      await Notification.create({
+        recipient: meeting.createdBy._id,
+        type: 'meeting_approved',
+        title: 'Meeting Approved',
+        message: `Your meeting "${meeting.meeting_name}" has been approved`,
+        relatedMeeting: meeting._id,
+        triggeredBy: req.user.id, // ⭐ FIX
+        metadata: {
+          meetingTime: meeting.meeting_datetime,
+          meetingName: meeting.meeting_name,
+          action: 'approved'
+        }
+      });
+    } catch (notifError) {
+      console.error('Failed to send approval notification:', notifError);
+    }
+
+    return res.json({ message: 'Meeting approved', meeting });
+  } catch (error) {
+    console.error('Approve meeting error:', error);
+    return res.status(500).json({ message: 'Failed to approve meeting' });
   }
 });
 
 // Reject meeting
 router.post('/:id/reject', authMiddleware, async (req, res) => {
   try {
-    const meeting = await ScheduledMeeting.findById(req.params.id);
+    const { reason } = req.body;
+    
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ message: 'Rejection reason is required' });
+    }
+
+    const meeting = await ScheduledMeeting.findById(req.params.id)
+      .populate('createdBy', 'firstName lastName');
 
     if (!meeting) {
-      return res.status(404).send({ message: 'Meeting not found' });
+      return res.status(404).json({ message: 'Meeting not found' });
     }
 
-    const user = await User.findById(req.user.id);
-
-    if (!user.canApproveMeetings) {
-      return res.status(403).send({ message: 'You do not have permission to reject meetings' });
-    }
-
-    if (meeting.approver && meeting.approver.toString() !== req.user.id) {
-      return res.status(403).send({ message: 'You are not the designated approver for this meeting' });
-    }
-
-    if (meeting.status !== 'pending_approval') {
-      return res.status(400).send({ message: 'Meeting is not pending approval' });
-    }
-
-    const { reason } = req.body;
-
-    if (!reason) {
-      return res.status(400).send({ message: 'Rejection reason is required' });
+    if (!req.user.canApproveMeetings) {
+      return res.status(403).json({ message: 'You do not have permission to reject meetings' });
     }
 
     meeting.status = 'rejected';
+    meeting.approver = req.user.id; // ⭐ FIX
     meeting.approvalDate = new Date();
     meeting.rejectionReason = reason;
-
     await meeting.save();
 
-    res.status(200).send({
-      message: 'Meeting rejected',
-      meeting
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).send({ message: 'Server error' });
+    try {
+      await Notification.create({
+        recipient: meeting.createdBy._id,
+        type: 'meeting_rejected',
+        title: 'Meeting Rejected',
+        message: `Your meeting "${meeting.meeting_name}" has been rejected`,
+        relatedMeeting: meeting._id,
+        triggeredBy: req.user.id, // ⭐ FIX
+        metadata: {
+          meetingTime: meeting.meeting_datetime,
+          meetingName: meeting.meeting_name,
+          action: 'rejected'
+        }
+      });
+    } catch (notifError) {
+      console.error('Failed to send rejection notification:', notifError);
+    }
+
+    return res.json({ message: 'Meeting rejected', meeting });
+  } catch (error) {
+    console.error('Reject meeting error:', error);
+    return res.status(500).json({ message: 'Failed to reject meeting' });
   }
 });
 
 // Cancel meeting - ONLY BY CREATOR AFTER APPROVAL
 router.post('/:id/cancel', authMiddleware, async (req, res) => {
   try {
-    const meeting = await ScheduledMeeting.findById(req.params.id);
+    const { reason } = req.body;
+    
+    const meeting = await ScheduledMeeting.findById(req.params.id)
+      .populate('attendees.user', 'firstName lastName email')
+      .populate('createdBy', 'firstName lastName');
 
     if (!meeting) {
-      return res.status(404).send({ message: 'Meeting not found' });
+      return res.status(404).json({ message: 'Meeting not found' });
     }
 
-    const user = await User.findById(req.user.id);
-    const isCreator = meeting.createdBy.toString() === req.user.id;
-
-    // CRITICAL FIX: Only creator can cancel approved meetings
-    // HODs can only approve/reject during pending_approval stage
-    if (!isCreator) {
-      return res.status(403).send({ 
-        message: 'Only the meeting creator can cancel the meeting. HODs can only approve or reject meetings during the approval stage.' 
-      });
+    // Check if user is creator
+    if (meeting.createdBy._id.toString() !== req.user.id) {
+      return res.status(403).json({ message: 'Only the meeting creator can cancel' });
     }
-
-    // Cannot cancel if already completed
-    if (meeting.status === 'completed') {
-      return res.status(400).send({ message: 'Cannot cancel a completed meeting' });
-    }
-
-    // Cannot cancel if already cancelled
-    if (meeting.status === 'cancelled') {
-      return res.status(400).send({ message: 'Meeting is already cancelled' });
-    }
-
-    const { reason } = req.body;
 
     meeting.status = 'cancelled';
-    meeting.cancellationReason = reason || 'Cancelled by creator';
-    meeting.cancelledBy = req.user.id;
+    meeting.cancellationReason = reason;
+    meeting.cancelledBy = req.user.id; // ⭐ FIX
     meeting.cancelledAt = new Date();
-    
     await meeting.save();
 
-    res.status(200).send({
-      message: 'Meeting cancelled successfully'
+    try {
+      await Notification.notifyAttendees(
+        meeting,
+        'meeting_cancelled',
+        req.user,
+        req.user.id // ⭐ FIX
+      );
+    } catch (notifError) {
+      console.error('Failed to send cancellation notifications:', notifError);
+    }
+
+    return res.json({ 
+      message: 'Meeting cancelled successfully',
+      meeting 
     });
-  } catch (err) {
-    console.error(err);
-    res.status(500).send({ message: 'Server error' });
+  } catch (error) {
+    console.error('Cancel meeting error:', error);
+    return res.status(500).json({ message: 'Failed to cancel meeting' });
   }
 });
 

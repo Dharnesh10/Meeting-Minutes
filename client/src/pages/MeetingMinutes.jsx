@@ -1,3 +1,4 @@
+// MeetingMinutes.jsx - FIXED VERSION
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
@@ -61,17 +62,14 @@ export default function MeetingMinutes() {
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(true);
 
-  // Scribe dialog
   const [scribeDialog, setScribeDialog] = useState(false);
   const [attendees, setAttendees] = useState([]);
 
-  // Real-time polling
   const [lastUpdate, setLastUpdate] = useState(null);
   const pollingInterval = useRef(null);
 
   const token = localStorage.getItem('token');
 
-  // Fetch initial data
   useEffect(() => {
     if (!meetingId) {
       navigate('/');
@@ -81,11 +79,9 @@ export default function MeetingMinutes() {
     fetchAttendees();
   }, [meetingId]);
 
-  // Start polling for updates
   useEffect(() => {
     if (!meetingId || !meeting) return;
 
-    // Poll every 2 seconds
     pollingInterval.current = setInterval(() => {
       pollForUpdates();
     }, 2000);
@@ -148,7 +144,6 @@ export default function MeetingMinutes() {
       if (res.ok) {
         const data = await res.json();
 
-        // Update minutes with new/updated ones
         if (data.updates.length > 0) {
           setMinutes(prev => {
             const updated = [...prev];
@@ -164,12 +159,10 @@ export default function MeetingMinutes() {
           });
         }
 
-        // Remove deleted minutes
         if (data.deleted.length > 0) {
           setMinutes(prev => prev.filter(m => !data.deleted.includes(m._id)));
         }
 
-        // Update meeting state
         if (data.meetingState) {
           setMeeting(prev => ({
             ...prev,
@@ -177,6 +170,11 @@ export default function MeetingMinutes() {
             meetingStarted: data.meetingState.meetingStarted,
             meetingEnded: data.meetingState.meetingEnded
           }));
+        }
+
+        // ⭐ FIX: Update permissions from polling
+        if (data.permissions) {
+          setPermissions(data.permissions);
         }
 
         setLastUpdate(data.timestamp);
@@ -209,7 +207,6 @@ export default function MeetingMinutes() {
       setSuccess('Minute added successfully');
       setTimeout(() => setSuccess(''), 3000);
       
-      // Immediate update (will also come via polling)
       setMinutes(prev => [...prev, data.minute]);
 
     } catch (err) {
@@ -426,7 +423,6 @@ export default function MeetingMinutes() {
 
   return (
     <Box sx={{ p: 3, maxWidth: 1200, mx: 'auto' }}>
-      {/* Header */}
       <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
         <IconButton onClick={() => navigate('/')}>
           <ArrowBack />
@@ -440,7 +436,6 @@ export default function MeetingMinutes() {
           </Typography>
         </Box>
 
-        {/* Meeting Status */}
         {meeting.meetingStarted && !meeting.meetingEnded && (
           <Chip
             label="Meeting in Progress"
@@ -457,7 +452,6 @@ export default function MeetingMinutes() {
         )}
       </Stack>
 
-      {/* Alerts */}
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
           {error}
@@ -469,7 +463,6 @@ export default function MeetingMinutes() {
         </Alert>
       )}
 
-      {/* Control Panel */}
       {permissions.isCreator && (
         <Card sx={{ mb: 3 }}>
           <CardContent>
@@ -483,6 +476,7 @@ export default function MeetingMinutes() {
                   color="success"
                   startIcon={<PlayArrow />}
                   onClick={handleStartMeeting}
+                  sx={{ color: 'white' }}
                 >
                   Start Meeting
                 </Button>
@@ -523,7 +517,6 @@ export default function MeetingMinutes() {
               )}
             </Stack>
 
-            {/* Current Scribe Info */}
             {meeting.currentScribe && (
               <Alert severity="info" sx={{ mt: 2 }}>
                 <Typography variant="body2">
@@ -537,7 +530,6 @@ export default function MeetingMinutes() {
       )}
 
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={3}>
-        {/* Minutes List */}
         <Box sx={{ flexGrow: 1 }}>
           <Card>
             <CardContent>
@@ -637,7 +629,6 @@ export default function MeetingMinutes() {
                 </List>
               )}
 
-              {/* Add Minute Input */}
               {permissions.canTakeMinutes && (
                 <Box sx={{ mt: 3 }}>
                   <Divider sx={{ mb: 2 }} />
@@ -688,7 +679,6 @@ export default function MeetingMinutes() {
           </Card>
         </Box>
 
-        {/* Side Panel - Attendees */}
         <Box sx={{ width: { xs: '100%', md: 300 } }}>
           <Card>
             <CardContent>
@@ -723,7 +713,6 @@ export default function MeetingMinutes() {
         </Box>
       </Stack>
 
-      {/* Assign Scribe Dialog */}
       <Dialog open={scribeDialog} onClose={() => setScribeDialog(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Assign Scribe</DialogTitle>
         <DialogContent>

@@ -159,8 +159,8 @@ export default function Sidebar({ open, setOpen }) {
         { text: 'Completed', path: '/my-meetings/completed' },
       ]
     },
-    { text: 'Tasks', icon: <PlaylistAddCheck />, path: '/tasks'},
     { text: 'Rejected', icon: <Block />, path: '/rejected-meetings' },
+    { text: 'Tasks', icon: <PlaylistAddCheck />, path: '/tasks'},
     { text: 'Calendar', icon: <CalendarMonth />, path: '/calendar' },
   ];
 

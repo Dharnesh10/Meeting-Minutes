@@ -13,6 +13,7 @@ const userActivityRoutes = require('./routes/userActivity');
 const notificationRoutes = require('./routes/notifications');
 
 const { autoCancelExpiredMeetings } = require('./services/autoCancelService');
+const { startAutoCompleteMeetingService } = require('./services/autoCompleteMeeting');
 
 const app = express();
 

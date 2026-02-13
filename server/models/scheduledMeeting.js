@@ -152,6 +152,10 @@ const scheduledMeetingSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'
     },
+    autoCompleted: {
+      type: Boolean,
+      default: false
+    },
     
     // Meeting follow-up
     meeting_followup: {

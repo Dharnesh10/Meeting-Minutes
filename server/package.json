@@ -11,7 +11,8 @@
     "mongoose": "^9.1.6",
     "multer": "^2.0.2",
     "mysql": "^2.18.1",
-    "mysql2": "^3.16.0"
+    "mysql2": "^3.16.0",
+    "node-cron": "^4.2.1"
   },
   "name": "server",
   "version": "1.0.0",

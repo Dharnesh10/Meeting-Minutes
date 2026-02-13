@@ -12,6 +12,7 @@ import Tasks from './pages/Tasks';
 import RejectedMeetings from './pages/RejectedMeetings';
 import Calendar from './components/Calendar';
 import Login from './components/Login'; // Ensure this component exists
+import PendingApprovals from './pages/PendingApprovals';
 import './App.css';
 
 function AppContent() {
@@ -113,6 +114,7 @@ function AppContent() {
             <Route path="/tasks" element={<Tasks />} />
             <Route path="/rejected-meetings" element={<RejectedMeetings />} />
             <Route path="/calendar" element={<Calendar />} />
+            <Route path='pending-approvals' element={<PendingApprovals />} />
             
             {/* Catch-all to redirect back home if path doesn't exist */}
             <Route path="*" element={<Home type="all" />} />

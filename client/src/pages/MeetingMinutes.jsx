@@ -432,7 +432,7 @@ export default function MeetingMinutes() {
             {meeting.meeting_name}
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            {formatDate(meeting.meeting_datetime)} at {formatTime(meeting.meeting_datetime)}
+            {formatDate(meeting.meeting_datetime)} at {formatTime(new Date(new Date(meeting.meeting_datetime).getTime() + meeting.meeting_duration * 60000))}
           </Typography>
         </Box>
 

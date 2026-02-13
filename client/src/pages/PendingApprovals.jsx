@@ -2,45 +2,40 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
+  Typography,
   Card,
   CardContent,
-  Typography,
-  IconButton,
   Stack,
-  Alert,
-  Chip,
   Button,
+  Chip,
+  IconButton,
+  Alert,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   TextField,
-  Divider
+  Divider,
+  Paper
 } from '@mui/material';
 import {
-  ArrowBack,
   CheckCircle,
   Cancel,
   Person,
   CalendarToday,
   Schedule,
   MeetingRoom,
-  Pending
+  ArrowBack,
+  Business,
+  PriorityHigh
 } from '@mui/icons-material';
 
-export default function PendingApprovals({ sidebarOpen = true }) {
+export default function PendingApprovals() {
   const navigate = useNavigate();
   const [meetings, setMeetings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  
-  // Approval dialog
-  const [approvalDialog, setApprovalDialog] = useState({
-    open: false,
-    meeting: null,
-    action: ''
-  });
+  const [approvalDialog, setApprovalDialog] = useState({ open: false, meeting: null, action: '' });
   const [approvalComments, setApprovalComments] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
 
@@ -51,363 +46,215 @@ export default function PendingApprovals({ sidebarOpen = true }) {
   }, []);
 
   const fetchPendingMeetings = async () => {
-    if (!token) {
-      navigate('/login');
-      return;
-    }
-
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:5000/api/meetings?role=pending_approval', {
-        headers: { Authorization: `Bearer ${token}` }
+      // Assuming your API supports a status filter
+      const res = await fetch('http://localhost:5000/api/meetings?status=pending_approval', {
+        headers: { Authorization: `Bearer ${token}` },
       });
-
-      if (res.status === 401) {
-        localStorage.clear();
-        window.location.href = '/login';
-        return;
+      if (res.ok) {
+        const data = await res.json();
+        setMeetings(data);
+      } else {
+        setError('Failed to fetch pending approvals');
       }
-
-      const data = await res.json();
-      setMeetings(data);
-      setError('');
     } catch (err) {
-      console.error(err);
-      setError('Failed to load pending meetings');
+      setError('Connection error');
     } finally {
       setLoading(false);
     }
   };
 
-  const openApprovalDialog = (meeting, action) => {
+  const handleAction = async () => {
+    const isApprove = approvalDialog.action === 'approve';
+    const endpoint = isApprove ? 'approve' : 'reject';
+    const body = isApprove 
+      ? { comments: approvalComments } 
+      : { reason: rejectionReason };
+
+    if (!isApprove && !rejectionReason.trim()) {
+      setError('A rejection reason is required');
+      return;
+    }
+
+    try {
+      const res = await fetch(`http://localhost:5000/api/meetings/${approvalDialog.meeting._id}/${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body)
+      });
+
+      if (res.ok) {
+        setMeetings(meetings.filter(m => m._id !== approvalDialog.meeting._id));
+        closeDialog();
+      } else {
+        const data = await res.json();
+        setError(data.message || 'Action failed');
+      }
+    } catch (err) {
+      setError('Network error');
+    }
+  };
+
+  const openDialog = (meeting, action) => {
     setApprovalDialog({ open: true, meeting, action });
     setApprovalComments('');
     setRejectionReason('');
   };
 
-  const closeApprovalDialog = () => {
-    setApprovalDialog({ open: false, meeting: null, action: '' });
-  };
+  const closeDialog = () => setApprovalDialog({ open: false, meeting: null, action: '' });
 
-  const handleApprove = async () => {
-    try {
-      const res = await fetch(
-        `http://localhost:5000/api/meetings/${approvalDialog.meeting._id}/approve`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ comments: approvalComments })
-        }
-      );
-
-      if (res.ok) {
-        setSuccess('Meeting approved successfully');
-        setTimeout(() => setSuccess(''), 3000);
-        fetchPendingMeetings();
-        closeApprovalDialog();
-      } else {
-        const data = await res.json();
-        setError(data.message);
-      }
-    } catch (err) {
-      console.error(err);
-      setError('Failed to approve meeting');
-    }
-  };
-
-  const handleReject = async () => {
-    if (!rejectionReason.trim()) {
-      setError('Please provide a reason for rejection');
-      return;
-    }
-
-    try {
-      const res = await fetch(
-        `http://localhost:5000/api/meetings/${approvalDialog.meeting._id}/reject`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ reason: rejectionReason })
-        }
-      );
-
-      if (res.ok) {
-        setSuccess('Meeting rejected');
-        setTimeout(() => setSuccess(''), 3000);
-        fetchPendingMeetings();
-        closeApprovalDialog();
-      } else {
-        const data = await res.json();
-        setError(data.message);
-      }
-    } catch (err) {
-      console.error(err);
-      setError('Failed to reject meeting');
-    }
-  };
-
-  const formatDate = (dt) =>
-    new Date(dt).toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-
-  const formatTime = (dt) =>
-    new Date(dt).toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
-  const truncateWithReadMore = (text, limit = 120) => {
-    if (!text) return '';
-    if (text.length <= limit) return text;
-    return `${text.slice(0, limit).trim()}... (read more)`;
-  };
+  const formatDate = (dt) => new Date(dt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  const formatTime = (dt) => new Date(dt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
   return (
-    <Box sx={{ p: 3, maxWidth: 1400, mx: 'auto' }}>
-      {/* Header */}
-      <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
-        <IconButton onClick={() => navigate('/')}>
+    <Box sx={{ p: 3, maxWidth: 1000, margin: 'auto' }}>
+      <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 4 }}>
+        <IconButton onClick={() => navigate(-1)}>
           <ArrowBack />
         </IconButton>
-        <Box sx={{ flexGrow: 1 }}>
-          <Typography variant="h5" fontWeight="bold">
-            Pending Approvals
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Meetings awaiting your approval ({meetings.length})
-          </Typography>
-        </Box>
-        <Chip 
-          label={`${meetings.length} Pending`}
-          color="warning"
-          icon={<Pending />}
-        />
+        <Typography variant="h4" fontWeight="bold">Approvals Queue</Typography>
+        <Chip label={`${meetings.length} Pending`} color="warning" />
       </Stack>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
-          {error}
-        </Alert>
-      )}
+      {error && <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>{error}</Alert>}
 
-      {success && (
-        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess('')}>
-          {success}
-        </Alert>
-      )}
-
-      {/* Meeting Cards */}
-      <Box
-        sx={{
-          display: 'grid',
-          gap: 3,
-          gridTemplateColumns: {
-            xs: '1fr',
-            sm: 'repeat(2, minmax(0, 1fr))',
-            md: sidebarOpen ? 'repeat(3, minmax(0, 1fr))' : 'repeat(4, minmax(0, 1fr))',
-          },
-        }}
-      >
-        {loading ? (
-          <Typography>Loading...</Typography>
-        ) : meetings.length > 0 ? (
-          meetings.map((meeting) => (
-            <Card
-              key={meeting._id}
-              sx={{
-                height: '100%',
-                minHeight: { xs: 420, sm: 460, md: 520 },
-                borderRadius: 3,
-                boxShadow: 2,
-                transition: 'all 0.3s ease',
-                '&:hover': {
-                  transform: 'translateY(-6px)',
-                  boxShadow: 6,
-                },
-              }}
-            >
-              <CardContent sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1, flexWrap: 'wrap' }}>
-                  <Typography variant="h6" fontWeight="bold">
-                    {meeting.meeting_name}
-                  </Typography>
-                  <Chip label={`ID: ${meeting.meetingid}`} size="small" variant="outlined" />
-                  <Chip
-                    label={meeting.priority.toUpperCase()}
-                    size="small"
-                    color={
-                      meeting.priority === 'urgent' ? 'error' :
-                      meeting.priority === 'high' ? 'warning' : 'default'
-                    }
+      {loading ? (
+        <Typography>Loading pending requests...</Typography>
+      ) : meetings.length === 0 ? (
+        <Paper sx={{ p: 5, textAlign: 'center', bgcolor: '#f9f9f9' }}>
+          <CheckCircle sx={{ fontSize: 60, color: 'success.light', mb: 2 }} />
+          <Typography variant="h6">All caught up!</Typography>
+          <Typography color="text.secondary">There are no meetings currently awaiting your approval.</Typography>
+        </Paper>
+      ) : (
+        <Stack spacing={3}>
+          {meetings.map((meeting) => (
+            <Card key={meeting._id} variant="outlined" sx={{ borderRadius: 2, '&:hover': { boxShadow: 2 } }}>
+              <CardContent>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+                  <Box>
+                    <Typography variant="h6" color="primary" fontWeight="bold">
+                      {meeting.meeting_name}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Requested by: <strong>{meeting.createdBy?.firstName} {meeting.createdBy?.lastName}</strong>
+                    </Typography>
+                  </Box>
+                  <Chip 
+                    label={meeting.priority?.toUpperCase()} 
+                    color={meeting.priority === 'urgent' ? 'error' : 'warning'} 
+                    size="small" 
+                    icon={<PriorityHigh fontSize="small" />}
                   />
-                </Stack>
-
-                {meeting.meeting_description && (
-                  <Typography
-                    variant="body2"
-                    color="text.secondary"
-                    sx={{
-                      mb: 2,
-                      display: '-webkit-box',
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    {truncateWithReadMore(meeting.meeting_description, 120)}
-                  </Typography>
-                )}
-
-                <Box sx={{ flex: 1, minHeight: 0 }}>
-                  <Stack spacing={1.5}>
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <Person fontSize="small" color="action" />
-                      <Typography variant="body2">
-                        <strong>Requested by:</strong> {meeting.createdBy?.firstName} {meeting.createdBy?.lastName} ({meeting.createdBy?.facultyId})
-                      </Typography>
-                    </Stack>
-
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <CalendarToday fontSize="small" color="action" />
-                      <Typography variant="body2">
-                        <strong>Date:</strong> {formatDate(meeting.meeting_datetime)}
-                      </Typography>
-                    </Stack>
-
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <Schedule fontSize="small" color="action" />
-                      <Typography variant="body2">
-                        <strong>Time:</strong> {formatTime(meeting.meeting_datetime)} ({meeting.meeting_duration} min)
-                      </Typography>
-                    </Stack>
-
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <MeetingRoom fontSize="small" color="action" />
-                      <Typography variant="body2">
-                        <strong>Venue:</strong> {meeting.venue?.name} ({meeting.venue?.code})
-                      </Typography>
-                    </Stack>
-
-                    {meeting.attendees && meeting.attendees.length > 0 && (
-                      <Typography variant="body2">
-                        <strong>Attendees:</strong> {meeting.attendees.length} people
-                      </Typography>
-                    )}
-                  </Stack>
                 </Box>
 
-                <Divider sx={{ my: 2 }} />
+                <Divider sx={{ my: 1.5 }} />
 
-                <Stack spacing={1}>
-                  <Button
-                    variant="contained"
-                    color="success"
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <Stack spacing={1}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <CalendarToday fontSize="small" color="action" />
+                        <Typography variant="body2">{formatDate(meeting.meeting_datetime)}</Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Schedule fontSize="small" color="action" />
+                        <Typography variant="body2">{formatTime(meeting.meeting_datetime)} ({meeting.meeting_duration} min)</Typography>
+                      </Box>
+                    </Stack>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Stack spacing={1}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <MeetingRoom fontSize="small" color="action" />
+                        <Typography variant="body2">{meeting.venue?.name}</Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Business fontSize="small" color="action" />
+                        <Typography variant="body2">Depts: {meeting.departments?.map(d => d.code).join(', ')}</Typography>
+                      </Box>
+                    </Stack>
+                  </Grid>
+                </Grid>
+
+                <Stack direction="row" spacing={2} sx={{ mt: 3 }}>
+                  <Button 
+                    fullWidth 
+                    variant="contained" 
+                    color="success" 
                     startIcon={<CheckCircle />}
-                    onClick={() => openApprovalDialog(meeting, 'approve')}
-                    fullWidth
+                    onClick={() => openDialog(meeting, 'approve')}
                   >
                     Approve
                   </Button>
-                  <Button
-                    variant="outlined"
-                    color="error"
+                  <Button 
+                    fullWidth 
+                    variant="outlined" 
+                    color="error" 
                     startIcon={<Cancel />}
-                    onClick={() => openApprovalDialog(meeting, 'reject')}
-                    fullWidth
+                    onClick={() => openDialog(meeting, 'reject')}
                   >
                     Reject
-                  </Button>
-                  <Button
-                    variant="text"
-                    size="small"
-                    onClick={() => navigate(`/meeting-details?id=${meeting._id}`)}
-                  >
-                    View Details
                   </Button>
                 </Stack>
               </CardContent>
             </Card>
-          ))
-        ) : (
-          <Box sx={{ textAlign: 'center', py: 5 }}>
-            <Typography variant="h6" color="text.secondary">
-              No pending approvals
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-              All meetings have been reviewed!
-            </Typography>
-          </Box>
-        )}
-      </Box>
+          ))}
+        </Stack>
+      )}
 
-      {/* Approval Dialog */}
-      <Dialog open={approvalDialog.open} onClose={closeApprovalDialog} maxWidth="sm" fullWidth>
+      {/* Reusable Action Dialog */}
+      <Dialog open={approvalDialog.open} onClose={closeDialog} fullWidth maxWidth="xs">
         <DialogTitle>
-          {approvalDialog.action === 'approve' ? 'Approve Meeting' : 'Reject Meeting'}
+          {approvalDialog.action === 'approve' ? 'Finalize Approval' : 'Specify Rejection Reason'}
         </DialogTitle>
-        <DialogContent dividers>
-          {approvalDialog.meeting && (
-            <>
-              <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
-                {approvalDialog.meeting.meeting_name}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" paragraph>
-                Requested by: {approvalDialog.meeting.createdBy?.firstName} {approvalDialog.meeting.createdBy?.lastName}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" paragraph>
-                Date: {formatDate(approvalDialog.meeting.meeting_datetime)} at {formatTime(approvalDialog.meeting.meeting_datetime)}
-              </Typography>
-
-              <Divider sx={{ my: 2 }} />
-
-              {approvalDialog.action === 'approve' ? (
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={3}
-                  label="Comments (Optional)"
-                  value={approvalComments}
-                  onChange={(e) => setApprovalComments(e.target.value)}
-                  placeholder="Add any comments or notes..."
-                />
-              ) : (
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={3}
-                  label="Reason for Rejection *"
-                  value={rejectionReason}
-                  onChange={(e) => setRejectionReason(e.target.value)}
-                  placeholder="Please provide a reason for rejection..."
-                  required
-                  error={!rejectionReason.trim() && approvalDialog.action === 'reject'}
-                  helperText="Required field"
-                />
-              )}
-            </>
+        <DialogContent>
+          {approvalDialog.action === 'approve' ? (
+            <TextField
+              autoFocus
+              margin="dense"
+              label="Optional Comments"
+              fullWidth
+              multiline
+              rows={3}
+              variant="outlined"
+              value={approvalComments}
+              onChange={(e) => setApprovalComments(e.target.value)}
+            />
+          ) : (
+            <TextField
+              autoFocus
+              margin="dense"
+              label="Why is this meeting rejected?"
+              fullWidth
+              multiline
+              rows={3}
+              variant="outlined"
+              required
+              value={rejectionReason}
+              onChange={(e) => setRejectionReason(e.target.value)}
+              error={!rejectionReason.trim()}
+            />
           )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={closeApprovalDialog}>Cancel</Button>
-          <Button
-            onClick={approvalDialog.action === 'approve' ? handleApprove : handleReject}
-            variant="contained"
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={closeDialog}>Cancel</Button>
+          <Button 
+            onClick={handleAction} 
+            variant="contained" 
             color={approvalDialog.action === 'approve' ? 'success' : 'error'}
           >
-            {approvalDialog.action === 'approve' ? 'Approve' : 'Reject'}
+            Confirm {approvalDialog.action === 'approve' ? 'Approval' : 'Rejection'}
           </Button>
         </DialogActions>
       </Dialog>
     </Box>
   );
 }
+
+// Add Grid import from MUI if not already present
+import { Grid } from '@mui/material';

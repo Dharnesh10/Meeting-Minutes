@@ -13,7 +13,6 @@ import {
   DialogContent,
   DialogActions,
   Button,
-  Divider,
   CircularProgress
 } from '@mui/material';
 import {
@@ -98,111 +97,126 @@ export default function RejectedMeetings() {
         </Box>
       </Stack>
 
-      {/* Alerts */}
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
 
-      {/* Grid Container */}
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 4, justifyContent: { xs: 'center', md: 'flex-start' } }}>
-        
         {loading ? (
-           <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', mt: 5 }}>
-             <CircularProgress />
-           </Box>
+          <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', mt: 5 }}>
+            <CircularProgress />
+          </Box>
         ) : meetings.length === 0 ? (
-           <Alert severity="info" sx={{ width: '100%' }}>No rejected or cancelled meetings found.</Alert>
+          <Alert severity="info" sx={{ width: '100%' }}>No rejected or cancelled meetings found.</Alert>
         ) : (
-          meetings.map((meeting) => (
-            <Card 
-              key={meeting._id} 
-              sx={{ 
-                width: 300, 
-                height: 400, 
-                borderRadius: '24px', // Large rounded corners like the image
-                boxShadow: '0px 4px 20px rgba(0,0,0,0.05)',
-                p: 3,
-                display: 'flex', 
-                flexDirection: 'column',
-                position: 'relative',
-                transition: 'transform 0.2s, box-shadow 0.2s',
-                '&:hover': { transform: 'translateY(-4px)', boxShadow: '0px 8px 30px rgba(0,0,0,0.1)' }
-              }}
-            >
-              {/* Badge */}
-              <Box sx={{ mb: 2 }}>
-                <Chip
-                  icon={meeting.status === 'rejected' ? <Block sx={{ fontSize: 16 }} /> : <Cancel sx={{ fontSize: 16 }} />}
-                  label={meeting.status === 'rejected' ? "Rejected by HOD" : "Cancelled"}
-                  sx={{ 
-                    bgcolor: meeting.status === 'rejected' ? '#ff3d00' : '#757575', 
-                    color: 'white',
-                    fontWeight: 600,
-                    height: 28,
-                    '& .MuiChip-icon': { color: 'white' }
-                  }}
-                />
-              </Box>
-
-              {/* Title & ID */}
-              <Typography variant="h6" fontWeight="bold" sx={{ fontSize: '1.1rem', mb: 0.5 }}>
-                {meeting.meeting_name}
-              </Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 3 }}>
-                ID: {meeting.meetingid || meeting._id.slice(-6)}
-              </Typography>
-
-              {/* Date & User Info */}
-              <Stack spacing={1.5} sx={{ mb: 3 }}>
-                <Stack direction="row" spacing={1.5} alignItems="center">
-                  <CalendarToday sx={{ fontSize: 18, color: 'text.secondary' }} />
-                  <Typography variant="body2" color="text.primary">
-                    {formatDate(meeting.meeting_datetime)}
-                  </Typography>
-                </Stack>
-                
-                <Stack direction="row" spacing={1.5} alignItems="center">
-                  <Person sx={{ fontSize: 20, color: 'text.secondary' }} />
-                  <Typography variant="body2" color="text.primary">
-                    {meeting.createdBy?.firstName} {meeting.createdBy?.lastName}
-                  </Typography>
-                </Stack>
-              </Stack>
-
-              {/* Reason Box */}
-              <Box 
+          meetings.map((meeting) => {
+            const isOvertime = meeting.cancellationReason?.toLowerCase().includes('overtime');
+            
+            return (
+              <Card 
+                key={meeting._id} 
                 sx={{ 
-                  bgcolor: '#fff5f5', // Light red background
-                  borderRadius: '12px',
-                  p: 1.5,
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 1.5,
-                  mb: 'auto' // Push footer to bottom
+                  width: 300, 
+                  height: 400, 
+                  borderRadius: '24px',
+                  boxShadow: '0px 4px 20px rgba(0,0,0,0.05)',
+                  p: 3,
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  position: 'relative',
+                  transition: 'transform 0.2s, box-shadow 0.2s',
+                  '&:hover': { transform: 'translateY(-4px)', boxShadow: '0px 8px 30px rgba(0,0,0,0.1)' }
                 }}
               >
-                <ErrorOutline sx={{ color: '#d32f2f', fontSize: 20, mt: 0.2 }} />
-                <Typography variant="body2" sx={{ color: '#c62828', fontSize: '0.9rem' }}>
-                  {meeting.status === 'rejected' 
-                    ? (meeting.rejectionReason || 'No reason provided') 
-                    : (meeting.cancellationReason || 'No reason provided')}
+                {/* Badge Logic */}
+                <Box sx={{ mb: 2 }}>
+                  <Chip
+                    icon={meeting.status === 'rejected' ? <Block sx={{ fontSize: 16 }} /> : <Cancel sx={{ fontSize: 16 }} />}
+                    label={
+                      meeting.status === 'rejected' 
+                        ? "Rejected by HOD" 
+                        : (isOvertime ? "Auto-Cancelled" : "Cancelled")
+                    }
+                    sx={{ 
+                      bgcolor: meeting.status === 'rejected' ? '#ff3d00' : (isOvertime ? '#d32f2f' : '#757575'), 
+                      color: 'white',
+                      fontWeight: 600,
+                      height: 28,
+                      '& .MuiChip-icon': { color: 'white' }
+                    }}
+                  />
+                </Box>
+
+                <Typography variant="h6" fontWeight="bold" sx={{ fontSize: '1.1rem', mb: 0.5 }}>
+                  {meeting.meeting_name}
                 </Typography>
-              </Box>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 3 }}>
+                  ID: {meeting.meetingid || meeting._id.slice(-6)}
+                </Typography>
 
-              {/* View Details Link */}
-              <Button
-                startIcon={<Visibility />}
-                onClick={() => handleViewDetails(meeting)}
-                sx={{ 
-                  textTransform: 'none', 
-                  color: '#3f51b5', 
-                  fontWeight: 600,
-                  fontSize: '0.95rem',
-                  mt: 2
-                }}
-              >
-                View Details
-              </Button>
-            </Card>
-          ))
+                <Stack spacing={1.5} sx={{ mb: 3 }}>
+                  <Stack direction="row" spacing={1.5} alignItems="center">
+                    <CalendarToday sx={{ fontSize: 18, color: 'text.secondary' }} />
+                    <Typography variant="body2">{formatDate(meeting.meeting_datetime)}</Typography>
+                  </Stack>
+                  
+                  <Stack direction="row" spacing={1.5} alignItems="center">
+                    <Person sx={{ fontSize: 20, color: 'text.secondary' }} />
+                    <Typography variant="body2">
+                      {meeting.createdBy?.firstName} {meeting.createdBy?.lastName}
+                    </Typography>
+                  </Stack>
+                </Stack>
+
+                {/* Unified Reason Box */}
+                <Box 
+                  sx={{ 
+                    bgcolor: '#fff5f5', 
+                    borderRadius: '12px',
+                    borderLeft: isOvertime ? '4px solid #d32f2f' : 'none',
+                    p: 1.5,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 0.5,
+                    mb: 'auto'
+                  }}
+                >
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <ErrorOutline sx={{ color: '#d32f2f', fontSize: 18 }} />
+                    <Typography variant="caption" fontWeight="bold" sx={{ color: '#d32f2f', textTransform: 'uppercase' }}>
+                      {meeting.status === 'rejected' ? 'HOD Feedback' : 'Cancellation Detail'}
+                    </Typography>
+                  </Stack>
+                  <Typography 
+                    variant="body2" 
+                    sx={{ 
+                      color: '#c62828', 
+                      fontSize: '0.85rem', 
+                      fontStyle: 'italic',
+                      lineHeight: 1.4 
+                    }}
+                  >
+                    "{meeting.status === 'rejected' 
+                      ? (meeting.rejectionReason || 'No reason provided') 
+                      : (meeting.cancellationReason || 'No reason provided')}"
+                  </Typography>
+                </Box>
+
+                <Button
+                  startIcon={<Visibility />}
+                  onClick={() => handleViewDetails(meeting)}
+                  sx={{ 
+                    textTransform: 'none', 
+                    color: '#3f51b5', 
+                    fontWeight: 600,
+                    fontSize: '0.95rem',
+                    mt: 2,
+                    justifyContent: 'flex-start'
+                  }}
+                >
+                  View Details
+                </Button>
+              </Card>
+            );
+          })
         )}
       </Box>
 
@@ -230,7 +244,7 @@ export default function RejectedMeetings() {
                </Box>
                <Box>
                  <Typography variant="subtitle2" color="text.secondary">Reason</Typography>
-                 <Typography variant="body1" color="error">
+                 <Typography variant="body1" color="error" sx={{ fontStyle: 'italic' }}>
                     {selectedMeeting.status === 'rejected' 
                         ? selectedMeeting.rejectionReason 
                         : selectedMeeting.cancellationReason || 'N/A'}
@@ -239,8 +253,8 @@ export default function RejectedMeetings() {
             </Stack>
           )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDetailsDialog(false)}>Close</Button>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setDetailsDialog(false)} variant="outlined">Close</Button>
         </DialogActions>
       </Dialog>
     </Box>

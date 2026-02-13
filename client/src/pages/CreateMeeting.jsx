@@ -299,14 +299,19 @@ export default function CreateMeeting() {
     }
   };
 
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
-    setError('');
-    setSuccess('');
-  };
+const handleChange = (e) => {
+  const { name, value } = e.target;
+
+  setFormData(prev => ({
+    ...prev,
+    [name]:
+      name === "meeting_duration"
+        ? value === "" ? "" : parseInt(value)
+        : value
+  }));
+};
+
+
 
   const addUserToMeeting = (user) => {
     const userId = user._id || user.id; // Safely get the ID
@@ -375,6 +380,12 @@ export default function CreateMeeting() {
     // Check venue availability
     if (venueAvailability && !venueAvailability.available) {
       setError('Selected venue is not available for this time slot');
+      setSaving(false);
+      return;
+    }
+
+    if (Number(formData.meeting_duration) < 15) {
+      setError('Meeting duration must be at least 15 minutes');
       setSaving(false);
       return;
     }
@@ -581,10 +592,16 @@ export default function CreateMeeting() {
                     type="number"
                     value={formData.meeting_duration}
                     onChange={handleChange}
+                    onBlur={() => {
+                      if (Number(formData.meeting_duration) < 15) {
+                        setError("Minimum duration is 15 minutes");
+                      }
+                    }}
                     required
                     fullWidth
                     inputProps={{ min: 15, step: 15 }}
                   />
+
                 </Grid>
               </Grid>
 

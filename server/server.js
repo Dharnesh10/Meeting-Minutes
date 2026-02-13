@@ -13,7 +13,6 @@ const userActivityRoutes = require('./routes/userActivity');
 const notificationRoutes = require('./routes/notifications');
 
 const { autoCancelExpiredMeetings } = require('./services/autoCancelService');
-const { startAutoCompleteMeetingService } = require('./services/autoCompleteMeeting');
 
 const app = express();
 
@@ -22,18 +21,9 @@ app.use(cors());
 app.use(express.json());
 
 // Database connection
-// mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/meeting-system', {
-//   useNewUrlParser: true,
-//   useUnifiedTopology: true,
-// })
-// .then(() => console.log('✅ MongoDB connected successfully'))
-// .catch(err => console.error('❌ MongoDB connection error:', err));
-mongoose.connect(
-  process.env.MONGODB_URI || 'mongodb://localhost:27017/meeting-system'
-)
-.then(() => console.log('✅ MongoDB connected successfully'))
-.catch(err => console.error('❌ MongoDB connection error:', err));
-
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/meeting-system')
+  .then(() => console.log('✅ MongoDB connected successfully'))
+  .catch(err => console.error('❌ MongoDB connection error:', err));
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -49,90 +39,90 @@ app.use('/api/notifications', notificationRoutes);
 app.get('/api/me', require('./middleware/auth'), async (req, res) => {
   try {
     const { User } = require('./models/user');
-    const user = await User.findById(req.user.id)
-      .select('-password')
-      .populate('department', 'name code');
-    
-    if (!user) {
-      return res.status(404).send({ message: 'User not found' });
-    }
-    
+    const user = await User.findById(req.user.id).select('-password').populate('department', 'name code');
+    if (!user) return res.status(404).send({ message: 'User not found' });
     res.status(200).send(user);
   } catch (err) {
-    console.error(err);
     res.status(500).send({ message: 'Server error' });
   }
 });
 
+// ===== THE FIX: AUTOMATIC LIFECYCLE CLEANUP WITH SPECIFIC MESSAGE =====
+
+const cleanOverdueMeetings = async () => {
+  try {
+    const { ScheduledMeeting } = require('./models/scheduledMeeting');
+    const now = new Date();
+
+    // 1. CANCEL Pending meetings that have already started/passed
+    // We set the specific message you requested here
+    const cancelResult = await ScheduledMeeting.updateMany(
+      {
+        status: 'pending_approval',
+        meeting_datetime: { $lt: now }
+      },
+      { 
+        $set: { 
+          status: 'cancelled',
+          cancellationReason: 'Meeting not started by the user! Meeting cancelled due to overtime.' 
+        } 
+      }
+    );
+
+    // 2. COMPLETE Approved meetings that have finished their duration
+    const completeResult = await ScheduledMeeting.updateMany(
+      {
+        status: 'approved',
+        $expr: {
+          $lt: [
+            { $add: ["$meeting_datetime", { $multiply: ["$meeting_duration", 60000] }] }, 
+            now
+          ]
+        }
+      },
+      { $set: { status: 'completed' } }
+    );
+
+    if (cancelResult.modifiedCount > 0 || completeResult.modifiedCount > 0) {
+      console.log(`[CLEANUP] ${cancelResult.modifiedCount} Pending meetings cancelled. ${completeResult.modifiedCount} Approved meetings completed.`);
+    }
+  } catch (err) {
+    console.error('[CLEANUP ERROR]:', err);
+  }
+};
+
+// Check every 60 seconds to keep the HOD Badge accurate
+setInterval(cleanOverdueMeetings, 60000);
+
+// Run on startup
+setTimeout(cleanOverdueMeetings, 3000);
+
+// ===== ATTENDANCE HEARTBEAT CLEANUP =====
+setInterval(async () => {
+  try {
+    const { UserActivity } = require('./models/userActivity');
+    const staleThreshold = new Date(Date.now() - 30000);
+    await UserActivity.updateMany(
+      { isCurrentlyActive: true, lastHeartbeat: { $lt: staleThreshold } },
+      { $set: { isCurrentlyActive: false } }
+    );
+  } catch (err) { console.error('Stale cleanup error:', err); }
+}, 30000);
+
 // Health check
-app.get('/health', (req, res) => {
-  res.status(200).send({ status: 'OK', message: 'Server is running' });
-});
+app.get('/health', (req, res) => res.status(200).send({ status: 'OK' }));
 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).send({ message: 'Route not found' });
-});
-
-// Error handler
+// 404 & Error Handlers
+app.use((req, res) => res.status(404).send({ message: 'Route not found' }));
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).send({ message: 'Something went wrong!' });
 });
 
-// ===== AUTO-CANCEL EXPIRED MEETINGS CRON JOB =====
-// Run every 30 minutes to check for expired meetings
-const AUTO_CANCEL_INTERVAL = 30 * 60 * 1000; // 30 minutes in milliseconds
-
-setInterval(async () => {
-  console.log('\n[CRON] Running auto-cancel job...');
-  const result = await autoCancelExpiredMeetings();
-  
-  if (result.cancelled > 0) {
-    console.log(`[CRON] Auto-cancelled ${result.cancelled} meeting(s)`);
-    result.meetings.forEach(m => {
-      console.log(`  - ${m.name} (ID: ${m.meetingId}) - Host: ${m.host}`);
-    });
-  } else {
-    console.log('[CRON] No meetings to auto-cancel');
-  }
-}, AUTO_CANCEL_INTERVAL);
-
-// Run once on startup
-setTimeout(async () => {
-  console.log('\n[STARTUP] Running initial auto-cancel check...');
-  const result = await autoCancelExpiredMeetings();
-  if (result.cancelled > 0) {
-    console.log(`[STARTUP] Auto-cancelled ${result.cancelled} meeting(s) on startup`);
-  }
-}, 5000); // Wait 5 seconds after startup
-
-// Background job for cleaning up stale attendance sessions
-setInterval(async () => {
-  try {
-    const { UserActivity } = require('./models/userActivity');
-    const staleThreshold = new Date(Date.now() - 30000); // 30 seconds ago
-
-    await UserActivity.updateMany(
-      {
-        isCurrentlyActive: true,
-        lastHeartbeat: { $lt: staleThreshold }
-      },
-      {
-        $set: { isCurrentlyActive: false }
-      }
-    );
-  } catch (err) {
-    console.error('Cleanup error:', err);
-  }
-}, 30000); // Run every 30 seconds
-
-// Start server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`\n🚀 Server running on port ${PORT}`);
-  console.log(`📅 Auto-cancel job scheduled every ${AUTO_CANCEL_INTERVAL / 60000} minutes`);
-  console.log(`🔄 Stale session cleanup running every 30 seconds\n`);
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`⏱️  Auto-cleanup running every 60 seconds`);
 });
 
 module.exports = app;

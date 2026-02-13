@@ -45,7 +45,9 @@ import {
   Visibility,
   CallSplit,
   FilterList,
-  ExpandMore
+  ExpandMore,
+  RememberMe,
+  VpnKey
 } from '@mui/icons-material';
 
 // ACCEPT 'type' PROP TO DETERMINE WHICH MEETINGS TO SHOW
@@ -139,6 +141,9 @@ export default function Home({ type = 'all' }) {
           break;
         case 'completed':
           queryParams = '?status=completed';
+          break;
+        case 'cancelled': // Add this case for your Rejected/Cancelled page
+          queryParams = '?status=cancelled';
           break;
         case 'all':
         default:
@@ -562,7 +567,7 @@ export default function Home({ type = 'all' }) {
                   </Stack>
                   <Stack direction="row" spacing={1} alignItems="center">
                     <Schedule fontSize="small" color="action" />
-                    <Typography variant="body2">{formatTime(meeting.meeting_datetime)} ({meeting.meeting_duration} min)</Typography>
+                    <Typography variant="body2">{formatTime(meeting.meeting_datetime)} - {formatTime(new Date(new Date(meeting.meeting_datetime).getTime() + meeting.meeting_duration * 60000))} ({meeting.meeting_duration} min)</Typography>
                   </Stack>
                   <Stack direction="row" spacing={1} alignItems="center">
                     <MeetingRoom fontSize="small" color="action" />
@@ -578,6 +583,17 @@ export default function Home({ type = 'all' }) {
                       </Box>
                     </Stack>
                   )}
+                  {meetings.map(m => {
+                    if (m._id === meeting._id && m.attendees && m.attendees.length > 0) {
+                      return (
+                        <Stack direction="row" spacing={1} alignItems="center" key={m._id}>
+                          <VpnKey fontSize="small" color="action" />
+                          <Typography variant="body2">Meeting id: {m.meetingid}</Typography>
+                        </Stack>
+                      );
+                    }
+                    return null;
+                  })}
                   {meeting.status === 'pending_approval' && meeting.approver && canApprove && (
                     <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
                       <Button size="small" variant="contained" color="success" startIcon={<CheckCircle />} onClick={(e) => openApprovalDialog(meeting, 'approve', e)} fullWidth>Approve</Button>

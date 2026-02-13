@@ -88,6 +88,7 @@ async function checkUserAvailability(userIds, meetingStart, meetingEnd, excludeM
 }
 
 // Get pending approval count for HODs
+// Get pending approval count for HODs - UPDATED WITH OVERTIME FILTER
 router.get('/pending-count', authMiddleware, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
@@ -96,9 +97,13 @@ router.get('/pending-count', authMiddleware, async (req, res) => {
       return res.status(200).send({ count: 0 });
     }
 
+    const now = new Date();
+
+    // Count only meetings that are pending AND have not passed their start time
     const count = await ScheduledMeeting.countDocuments({
       status: 'pending_approval',
-      approver: req.user.id
+      approver: req.user.id,
+      meeting_datetime: { $gt: now } // Only count future meetings
     });
 
     res.status(200).send({ count });
@@ -228,11 +233,12 @@ router.post('/search/check-conflicts', authMiddleware, async (req, res) => {
   }
 });
 
-// Get all meetings for logged-in user with filters
+// Get all meetings for logged-in user with filters - UPDATED WITH OVERTIME LOGIC
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const { status, role, filter } = req.query;
     const user = await User.findById(req.user.id).populate('department');
+    const now = new Date();
 
     let query = {};
 
@@ -244,6 +250,8 @@ router.get('/', authMiddleware, async (req, res) => {
     } else if (role === 'pending_approval' && user.canApproveMeetings) {
       query.status = 'pending_approval';
       query.approver = req.user.id;
+      // When HOD looks specifically at the pending list, only show meetings that haven't started
+      query.meeting_datetime = { $gt: now };
     } else if (role === 'department') {
       query.departments = user.department._id;
     } else {
@@ -254,12 +262,27 @@ router.get('/', authMiddleware, async (req, res) => {
       ];
     }
 
-    // Status filter
+    // Status filter logic
     if (status) {
       query.status = status;
+      
+      // If user is looking at scheduled/approved, ensure we only show future ones
+      if (status === 'approved') {
+        query.meeting_datetime = { $gt: now };
+      }
     } else {
-      // Exclude rejected and cancelled from normal views
+      // DEFAULT VIEW: Exclude rejected/cancelled AND exclude overtime pending meetings
       query.status = { $nin: ['rejected', 'cancelled'] };
+      
+      // Do not show "Pending Approval" meetings in the main list if they are already overtime
+      // They will appear in 'Rejected & Cancelled' once the cron job moves them
+      query.$and = query.$and || [];
+      query.$and.push({
+        $or: [
+          { status: { $ne: 'pending_approval' } },
+          { meeting_datetime: { $gt: now } }
+        ]
+      });
     }
 
     // Additional filters

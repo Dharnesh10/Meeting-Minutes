@@ -542,7 +542,7 @@ export default function MeetingDetails() {
           </Typography>
           <Stack direction="row" spacing={2} alignItems="center" sx={{ mt: 0.5 }}>
             <Typography variant="body2" color="text.secondary">
-              {formatDate(meeting.meeting_datetime)}
+              {formatDate(meeting.meeting_datetime)} - {formatTime(new Date(new Date(meeting.meeting_datetime).getTime() + meeting.meeting_duration * 60000))}
             </Typography>
             <Chip 
               label={`${onlineCount} online`}

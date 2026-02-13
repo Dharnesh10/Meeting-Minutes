@@ -592,6 +592,7 @@ router.post('/:id/complete', authMiddleware, async (req, res) => {
 
 
 // Update meeting - WITH CONFLICT CHECKING
+// Update meeting - WITH CONFLICT CHECKING
 router.put('/:id', authMiddleware, async (req, res) => {
   try {
     const meeting = await ScheduledMeeting.findById(req.params.id);
@@ -675,12 +676,31 @@ router.put('/:id', authMiddleware, async (req, res) => {
       }
     }
 
-    // Check attendee conflicts if attendees or time changed
-    if (attendees || meeting_date || meeting_time || meeting_duration) {
-      const attendeesToCheck = attendees || meeting.attendees.map(a => a.user.toString());
-      
+    // 1. Collect all intended attendee IDs (individual + departments)
+    let allAttendeeIds = new Set();
+
+    // Add explicitly selected attendees
+    const finalAttendees = attendees || meeting.attendees.map(a => a.user.toString());
+    finalAttendees.forEach(id => allAttendeeIds.add(id.toString()));
+
+    // 2. Add department users (mirroring the logic from the POST route)
+    const finalDepartments = departments || meeting.departments;
+    if (finalDepartments && finalDepartments.length > 0) {
+      for (const deptId of finalDepartments) {
+        const deptUsers = await User.find({
+          department: deptId,
+          isActive: true
+        }).select('_id');
+        deptUsers.forEach(u => allAttendeeIds.add(u._id.toString()));
+      }
+    }
+
+    const finalAttendeeIdsArray = Array.from(allAttendeeIds);
+
+    // 3. Check for conflicts if attendees, departments, or time changed
+    if (attendees || departments || meeting_date || meeting_time || meeting_duration) {
       const attendeeConflicts = await checkUserAvailability(
-        attendeesToCheck,
+        finalAttendeeIdsArray,
         meeting_datetime,
         meeting_end_datetime,
         meeting._id
@@ -692,13 +712,22 @@ router.put('/:id', authMiddleware, async (req, res) => {
           conflicts: attendeeConflicts
         });
       }
+    }
 
-      if (attendees) {
-        meeting.attendees = attendees.map(userId => ({
-          user: userId,
-          responseStatus: 'pending'
-        }));
-      }
+    // 4. Update the attendees array while PRESERVING existing RSVP statuses
+    if (attendees || departments) {
+      const existingStatuses = {};
+      meeting.attendees.forEach(a => {
+        existingStatuses[a.user.toString()] = a.responseStatus;
+      });
+
+      meeting.attendees = finalAttendeeIdsArray.map(userId => ({
+        user: userId,
+        responseStatus: existingStatuses[userId.toString()] || 'pending'
+      }));
+
+      // Force Mongoose to save the subdocument array
+      meeting.markModified('attendees');
     }
 
     await meeting.save();

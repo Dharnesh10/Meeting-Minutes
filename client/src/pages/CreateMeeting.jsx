@@ -309,7 +309,8 @@ export default function CreateMeeting() {
   };
 
   const addUserToMeeting = (user) => {
-    if (!formData.selectedUsers.find(u => u._id === user._id)) {
+    const userId = user._id || user.id; // Safely get the ID
+    if (!formData.selectedUsers.find(u => (u._id || u.id) === userId)) {
       setFormData({
         ...formData,
         selectedUsers: [...formData.selectedUsers, user]
@@ -322,7 +323,7 @@ export default function CreateMeeting() {
   const removeUser = (userId) => {
     setFormData({
       ...formData,
-      selectedUsers: formData.selectedUsers.filter(u => u._id !== userId)
+      selectedUsers: formData.selectedUsers.filter(u => (u._id || u.id) !== userId)
     });
   };
 
@@ -388,7 +389,9 @@ export default function CreateMeeting() {
         venue: formData.venue,
         meetingType: formData.meetingType,
         priority: formData.priority,
-        attendees: formData.selectedUsers.map(u => u._id),
+        attendees: formData.selectedUsers
+          .map(u => u._id || u.id)
+          .filter(Boolean), // This ensures no 'undefined' or null values are sent
         departments: formData.selectedDepartments,
         agenda: formData.agenda.filter(a => a.title),
         isFollowup: isFollowupMode,

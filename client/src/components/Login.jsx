@@ -8,9 +8,12 @@ import {
   Typography,
   Alert,
   Container,
-  Link
+  Link,
+  InputAdornment,
+  IconButton
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
+import { Visibility, VisibilityOff } from '@mui/icons-material';
 
 export default function Login() {
   const [data, setData] = useState({
@@ -19,6 +22,7 @@ export default function Login() {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -50,15 +54,64 @@ export default function Login() {
         throw new Error(result.message || 'Login failed');
       }
 
-      // Success - save token and user data
-      localStorage.setItem('token', result.data);
-      localStorage.setItem('firstName', result.firstName);
-      localStorage.setItem('lastName', result.lastName);
-      localStorage.setItem('email', result.email);
+      // Clear old data first
+      localStorage.clear();
 
-      // Redirect to home
+      // Save token
+      localStorage.setItem('token', result.data);
+
+      // Save user data from the user object (NEW API FORMAT)
+      if (result.user) {
+        
+        // Save all user information
+        if (result.user.firstName) {
+          localStorage.setItem('firstName', result.user.firstName);
+        }
+        if (result.user.lastName) {
+          localStorage.setItem('lastName', result.user.lastName);
+        }
+        if (result.user.email) {
+          localStorage.setItem('email', result.user.email);
+        }
+        if (result.user.id) {
+          localStorage.setItem('userId', result.user.id);
+        }
+        if (result.user.role) {
+          localStorage.setItem('role', result.user.role);
+        }
+        if (result.user.facultyId) {
+          localStorage.setItem('facultyId', result.user.facultyId);
+        }
+        localStorage.setItem('canApproveMeetings', 
+          (result.user.canApproveMeetings || false).toString()
+        );
+        
+        // Save department info
+        if (result.user.department) {
+          const deptId = result.user.department._id || result.user.department;
+          localStorage.setItem('departmentId', deptId);
+          
+          if (result.user.department.name) {
+            localStorage.setItem('departmentName', result.user.department.name);
+          }
+        }
+      } else if (result.firstName) {
+        // Fallback: OLD API FORMAT (backward compatibility)
+        console.log('Using old API format');
+        localStorage.setItem('firstName', result.firstName);
+        localStorage.setItem('lastName', result.lastName);
+        localStorage.setItem('email', result.email);
+      }
+
+      // Verify what was saved
+      console.log('Saved to localStorage:', {
+        firstName: localStorage.getItem('firstName'),
+        lastName: localStorage.getItem('lastName'),
+        role: localStorage.getItem('role')
+      });
+
+      // Redirect to home without reload
       navigate('/');
-      window.location.reload(); // Refresh to load user data
 
     } catch (err) {
       console.error('Login error:', err);
@@ -88,7 +141,7 @@ export default function Login() {
             </Typography>
 
             {error && (
-              <Alert severity="error" sx={{ mb: 2 }}>
+              <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
                 {error}
               </Alert>
             )}
@@ -110,12 +163,24 @@ export default function Login() {
                 fullWidth
                 label="Password"
                 name="password"
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 value={data.password}
                 onChange={handleChange}
                 required
                 sx={{ mb: 3 }}
                 autoComplete="current-password"
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        onClick={() => setShowPassword(!showPassword)}
+                        edge="end"
+                      >
+                        {showPassword ? <VisibilityOff /> : <Visibility />}
+                      </IconButton>
+                    </InputAdornment>
+                  )
+                }}
               />
 
               <Button

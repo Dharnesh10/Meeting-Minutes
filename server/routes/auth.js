@@ -12,10 +12,15 @@ router.post('/', async (req, res) => {
       return res.status(400).send({ message: error.details[0].message });
     }
 
-    // Find user by email
-    const user = await User.findOne({ email: req.body.email });
+    // Find user by email and populate department
+    const user = await User.findOne({ email: req.body.email }).populate('department');
     if (!user) {
       return res.status(401).send({ message: 'Invalid Email or Password' });
+    }
+
+    // Check if user is active
+    if (!user.isActive) {
+      return res.status(403).send({ message: 'Account is deactivated. Please contact administrator.' });
     }
 
     // Verify password
@@ -31,10 +36,22 @@ router.post('/', async (req, res) => {
     // Generate token
     const token = user.generateAuthToken();
 
-    // Send response
-    res.status(200).send({
+    // Send response with complete user data
+    return res.status(200).send({
       data: token,
       message: 'Logged in successfully',
+      // THIS IS THE CRITICAL PART - user object with actual data
+      user: {
+        id: user._id.toString(),
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        role: user.role,
+        facultyId: user.facultyId,
+        department: user.department,
+        canApproveMeetings: user.canApproveMeetings || false
+      },
+      // BACKWARD COMPATIBILITY - also send at root level
       firstName: user.firstName,
       lastName: user.lastName,
       email: user.email
@@ -42,7 +59,7 @@ router.post('/', async (req, res) => {
 
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).send({ message: 'Internal Server Error' });
+    return res.status(500).send({ message: 'Internal Server Error' });
   }
 });
 

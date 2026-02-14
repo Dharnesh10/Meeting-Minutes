@@ -60,6 +60,7 @@ export default function Home({ type = 'all' }) {
   const [userRole, setUserRole] = useState('');
   const [canApprove, setCanApprove] = useState(false);
   const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
+  const [userName, setUserName] = useState(localStorage.getItem('firstName') || 'User');
 
   const [approvalDialog, setApprovalDialog] = useState({
     open: false,
@@ -72,7 +73,6 @@ export default function Home({ type = 'all' }) {
   const [menuAnchor, setMenuAnchor] = useState(null);
   const [selectedMeeting, setSelectedMeeting] = useState(null);
 
-  const userName = localStorage.getItem('firstName') || 'User';
   const token = localStorage.getItem('token');
   const [filterAnchor, setFilterAnchor] = useState(null);
 
@@ -90,24 +90,31 @@ export default function Home({ type = 'all' }) {
     return () => clearInterval(interval);
   }, [canApprove]);
 
-  const fetchUserInfo = async () => {
-    if (!token) return;
-    try {
-      const res = await fetch('http://localhost:5000/api/me', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setUserRole(data.role);
-        setCanApprove(data.canApproveMeetings);
-        if (data.canApproveMeetings) {
-          fetchPendingApprovalCount();
-        }
+const fetchUserInfo = async () => {
+  if (!token) return;
+  try {
+    const res = await fetch('http://localhost:5000/api/me', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setUserRole(data.role);
+      setCanApprove(data.canApproveMeetings);
+      
+      // Update userName if not in localStorage
+      if (data.firstName && !localStorage.getItem('firstName')) {
+        localStorage.setItem('firstName', data.firstName);
+        setUserName(data.firstName);
       }
-    } catch (err) {
-      console.error(err);
+      
+      if (data.canApproveMeetings) {
+        fetchPendingApprovalCount();
+      }
     }
-  };
+  } catch (err) {
+    console.error(err);
+  }
+};
 
   const fetchPendingApprovalCount = async () => {
     try {

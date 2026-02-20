@@ -41,24 +41,31 @@ export default function Navbar({ sidebarOpen, toggleTheme, themeMode }) {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   
-  const [name, setName] = useState('User');
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
 
   const token = localStorage.getItem('token');
   const drawerWidth = 280;
   const miniDrawerWidth = 70;
 
-  useEffect(() => {
-    if (!token) return;
+useEffect(() => {
+  const token = localStorage.getItem('token');
+  if (!token) return;
 
-    try {
-      const decoded = jwtDecode(token);
-      setName(decoded.name || decoded.userName || 'User');
-      setEmail(decoded.email || decoded.userEmail || '');
-    } catch (error) {
-      console.error('Failed to decode token:', error);
+  try {
+    const decoded = jwtDecode(token);
+    // Log this specifically to see what's inside during the render
+
+    // Match the key from your console log exactly
+    if (decoded.fullName) {
+      setName(decoded.fullName);
+    } else if (decoded.firstName) {
+      setName(`${decoded.firstName} ${decoded.lastName || ''}`.trim());
     }
-  }, []);
+  } catch (error) {
+    console.error('Navbar token error:', error);
+  }
+}, []); // Empty dependency array ensures this runs once on mount
 
   // Fetch notifications on mount and poll every 30 seconds
   useEffect(() => {

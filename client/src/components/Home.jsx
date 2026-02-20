@@ -1,5 +1,7 @@
+// frontend/src/components/Home.jsx
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import axios from '../config/axios';
 import {
   Card,
   CardContent,
@@ -22,9 +24,6 @@ import {
   MenuItem,
   ListItemIcon,
   ListItemText,
-  Select,
-  FormControl,
-  InputLabel,
   Divider
 } from '@mui/material';
 import {
@@ -40,17 +39,13 @@ import {
   Pending,
   MoreVert,
   Business,
-  People,
-  Info,
   Visibility,
   CallSplit,
   FilterList,
   ExpandMore,
-  RememberMe,
   VpnKey
 } from '@mui/icons-material';
 
-// ACCEPT 'type' PROP TO DETERMINE WHICH MEETINGS TO SHOW
 export default function Home({ type = 'all' }) {
   const navigate = useNavigate();
   const [meetings, setMeetings] = useState([]);
@@ -72,11 +67,8 @@ export default function Home({ type = 'all' }) {
 
   const [menuAnchor, setMenuAnchor] = useState(null);
   const [selectedMeeting, setSelectedMeeting] = useState(null);
-
-  const token = localStorage.getItem('token');
   const [filterAnchor, setFilterAnchor] = useState(null);
 
-  // FETCH WHENEVER 'type' CHANGES (Route change)
   useEffect(() => {
     fetchUserInfo();
     fetchMeetings();
@@ -90,71 +82,55 @@ export default function Home({ type = 'all' }) {
     return () => clearInterval(interval);
   }, [canApprove]);
 
-const fetchUserInfo = async () => {
-  if (!token) return;
-  try {
-    const res = await fetch('http://localhost:5000/api/me', {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    if (res.ok) {
-      const data = await res.json();
-      setUserRole(data.role);
-      setCanApprove(data.canApproveMeetings);
+  const fetchUserInfo = async () => {
+    try {
+      const response = await axios.get('/me');
+      setUserRole(response.data.role);
+      setCanApprove(response.data.canApproveMeetings);
       
-      // Update userName if not in localStorage
-      if (data.firstName && !localStorage.getItem('firstName')) {
-        localStorage.setItem('firstName', data.firstName);
-        setUserName(data.firstName);
+      if (response.data.firstName && !localStorage.getItem('firstName')) {
+        localStorage.setItem('firstName', response.data.firstName);
+        setUserName(response.data.firstName);
+      } else {
+        setUserName(response.data.firstName || localStorage.getItem('firstName') || 'User');
       }
       
-      if (data.canApproveMeetings) {
+      if (response.data.canApproveMeetings) {
         fetchPendingApprovalCount();
       }
+    } catch (err) {
+      console.error('[Home] fetchUserInfo error:', err);
+      setUserName(localStorage.getItem('firstName') || 'User');
     }
-  } catch (err) {
-    console.error(err);
-  }
-};
+  };
 
   const fetchPendingApprovalCount = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/meetings/pending-count', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setPendingApprovalCount(data.count);
-      }
+      const response = await axios.get('/meetings/pending-count');
+      setPendingApprovalCount(response.data.count);
     } catch (err) {
-      console.error(err);
+      console.error('[Home] fetchPendingApprovalCount error:', err);
     }
   };
 
   const fetchMeetings = async () => {
-    if (!token) {
-      window.location.href = '/login';
-      return;
-    }
-
     setLoading(true);
     try {
       let queryParams = '';
       
-      // LOGIC REPLACING THE TABS
       switch (type) {
         case 'scheduled':
-          // Scheduled typically means "Upcoming" or "Approved"
           queryParams = '?status=approved'; 
           break;
         case 'completed':
           queryParams = '?status=completed';
           break;
-        case 'cancelled': // Add this case for your Rejected/Cancelled page
+        case 'cancelled':
           queryParams = '?status=cancelled';
           break;
         case 'all':
         default:
-          queryParams = ''; // Fetch all
+          queryParams = '';
           break;
       }
 
@@ -163,28 +139,17 @@ const fetchUserInfo = async () => {
         queryParams += `filter=${sortFilter}`;
       }
 
-      const res = await fetch(`http://localhost:5000/api/meetings${queryParams}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (res.status === 401) {
-        localStorage.clear();
-        window.location.href = '/login';
-        return;
-      }
-
-      const data = await res.json();
-      setMeetings(data);
+      const response = await axios.get(`/meetings${queryParams}`);
+      setMeetings(response.data);
       setError('');
     } catch (err) {
-      console.error(err);
-      setError('Failed to load meetings');
+      console.error('[Home] fetchMeetings error:', err);
+      setError(err.message || 'Failed to load meetings');
     } finally {
       setLoading(false);
     }
   };
 
-  // Helper to get Page Title based on prop
   const getPageTitle = () => {
     switch(type) {
       case 'scheduled': return 'Scheduled Meetings';
@@ -192,8 +157,6 @@ const fetchUserInfo = async () => {
       default: return 'All Meetings';
     }
   }
-
-  // ... (Keep handleCardClick, handleEdit, handleDelete, handleCancel, Approvals, formatDate, formatTime, getStatusColor, getStatusLabel, getPriorityColor, handleMenuOpen, handleMenuClose exactly as before) ...
 
   const handleCardClick = (meetingId, event) => {
     if (
@@ -214,22 +177,15 @@ const fetchUserInfo = async () => {
   const handleDelete = async (meeting, event) => {
     event.stopPropagation();
     if (!window.confirm('Are you sure you want to delete this meeting?')) return;
+    
     try {
-      const res = await fetch(`http://localhost:5000/api/meetings/${meeting._id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        setMeetings(meetings.filter(m => m._id !== meeting._id));
-        setError('');
-        handleMenuClose();
-      } else {
-        const data = await res.json();
-        setError(data.message || 'Failed to delete meeting');
-      }
+      await axios.delete(`/meetings/${meeting._id}`);
+      setMeetings(meetings.filter(m => m._id !== meeting._id));
+      setError('');
+      handleMenuClose();
     } catch (err) {
-      console.error(err);
-      setError('Failed to delete meeting');
+      console.error('[Home] handleDelete error:', err);
+      setError(err.message || 'Failed to delete meeting');
     }
   };
 
@@ -237,25 +193,14 @@ const fetchUserInfo = async () => {
     event.stopPropagation();
     const reason = prompt('Please provide a reason for cancellation:');
     if (!reason) return;
+    
     try {
-      const res = await fetch(`http://localhost:5000/api/meetings/${meeting._id}/cancel`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ reason })
-      });
-      if (res.ok) {
-        fetchMeetings();
-        handleMenuClose();
-      } else {
-        const data = await res.json();
-        setError(data.message);
-      }
+      await axios.post(`/meetings/${meeting._id}/cancel`, { reason });
+      fetchMeetings();
+      handleMenuClose();
     } catch (err) {
-      console.error(err);
-      setError('Failed to cancel meeting');
+      console.error('[Home] handleCancel error:', err);
+      setError(err.message || 'Failed to cancel meeting');
     }
   };
 
@@ -272,28 +217,15 @@ const fetchUserInfo = async () => {
 
   const handleApprove = async () => {
     try {
-      const res = await fetch(
-        `http://localhost:5000/api/meetings/${approvalDialog.meeting._id}/approve`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ comments: approvalComments })
-        }
-      );
-      if (res.ok) {
-        fetchMeetings();
-        fetchPendingApprovalCount();
-        closeApprovalDialog();
-      } else {
-        const data = await res.json();
-        setError(data.message);
-      }
+      await axios.post(`/meetings/${approvalDialog.meeting._id}/approve`, {
+        comments: approvalComments
+      });
+      fetchMeetings();
+      fetchPendingApprovalCount();
+      closeApprovalDialog();
     } catch (err) {
-      console.error(err);
-      setError('Failed to approve meeting');
+      console.error('[Home] handleApprove error:', err);
+      setError(err.message || 'Failed to approve meeting');
     }
   };
 
@@ -302,29 +234,17 @@ const fetchUserInfo = async () => {
       setError('Please provide a reason for rejection');
       return;
     }
+    
     try {
-      const res = await fetch(
-        `http://localhost:5000/api/meetings/${approvalDialog.meeting._id}/reject`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ reason: rejectionReason })
-        }
-      );
-      if (res.ok) {
-        fetchMeetings();
-        fetchPendingApprovalCount();
-        closeApprovalDialog();
-      } else {
-        const data = await res.json();
-        setError(data.message);
-      }
+      await axios.post(`/meetings/${approvalDialog.meeting._id}/reject`, {
+        reason: rejectionReason
+      });
+      fetchMeetings();
+      fetchPendingApprovalCount();
+      closeApprovalDialog();
     } catch (err) {
-      console.error(err);
-      setError('Failed to reject meeting');
+      console.error('[Home] handleReject error:', err);
+      setError(err.message || 'Failed to reject meeting');
     }
   };
 
@@ -386,7 +306,6 @@ const fetchUserInfo = async () => {
       {/* Header */}
       <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, mb: 3, gap: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          {/* If looking at All Meetings, say Welcome. If sub-page, show Title */}
           {type === 'all' ? (
             <Typography variant="h5" fontWeight="bold">
               Welcome, {userName}!
@@ -426,7 +345,7 @@ const fetchUserInfo = async () => {
               variant="text"
               startIcon={<FilterList />}
               endIcon={<ExpandMore fontSize="small" />}
-              onClick={(e) => setFilterAnchor(e.currentTarget)} // You need to add this state
+              onClick={(e) => setFilterAnchor(e.currentTarget)}
               sx={{ 
                 color: 'text.secondary',
                 textTransform: 'none',
@@ -434,14 +353,13 @@ const fetchUserInfo = async () => {
                 '&:hover': { bgcolor: 'transparent', color: 'primary.main' }
               }}
             >
-              {/* Map value to label for display */}
               {sortFilter === 'all' ? 'Filter' : 
               sortFilter === 'created' ? 'My Meetings' : 
               sortFilter.replace('_', ' ')}
             </Button>
             
             <Menu
-              anchorEl={filterAnchor} // Add state: const [filterAnchor, setFilterAnchor] = useState(null);
+              anchorEl={filterAnchor}
               open={Boolean(filterAnchor)}
               onClose={() => setFilterAnchor(null)}
               PaperProps={{
@@ -494,8 +412,7 @@ const fetchUserInfo = async () => {
                   top: 8, 
                   left: 8, 
                   zIndex: 1,
-                  color: 'white', // This forces the text color to white
-                  // Optional: if the icon is also looking dark, add this:
+                  color: 'white',
                   '& .MuiChip-icon': { color: 'white' } 
                 }}
               />
@@ -516,16 +433,16 @@ const fetchUserInfo = async () => {
 
               <CardMedia
                 component="img"
-                height="140"
+                height="180"
                 image="/meeting.png"
                 alt="Meeting"
                 sx={{
-                  width: '90%',        // Makes it smaller (90% of card width)
-                  height: 210,        // Fixed height
-                  marginTop: '25px',   // Adds spacing top
-                  marginX: 'auto',    // Centers the image horizontally
-                  borderRadius: 2,     // rounds the corners of the image
-                  objectFit: 'cover'   // keeps the image looking good
+                  width: '90%',
+                  height: 170,
+                  marginTop: '20px',
+                  marginX: 'auto',
+                  borderRadius: 2,
+                  objectFit: 'cover'
                 }}
               />
 
@@ -537,7 +454,7 @@ const fetchUserInfo = async () => {
 
                 {meeting.meeting_description && (
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    {meeting.meeting_description.slice(0, 100)}
+                    Description: {meeting.meeting_description.slice(0, 100)}
                     {meeting.meeting_description.length > 100 && '...'}
                   </Typography>
                 )}
@@ -590,17 +507,10 @@ const fetchUserInfo = async () => {
                       </Box>
                     </Stack>
                   )}
-                  {meetings.map(m => {
-                    if (m._id === meeting._id && m.attendees && m.attendees.length > 0) {
-                      return (
-                        <Stack direction="row" spacing={1} alignItems="center" key={m._id}>
-                          <VpnKey fontSize="small" color="action" />
-                          <Typography variant="body2">Meeting id: {m.meetingid}</Typography>
-                        </Stack>
-                      );
-                    }
-                    return null;
-                  })}
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <VpnKey fontSize="small" color="action" />
+                    <Typography variant="body2">Meeting id: {meeting.meetingid}</Typography>
+                  </Stack>
                   {meeting.status === 'pending_approval' && meeting.approver && canApprove && (
                     <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
                       <Button size="small" variant="contained" color="success" startIcon={<CheckCircle />} onClick={(e) => openApprovalDialog(meeting, 'approve', e)} fullWidth>Approve</Button>

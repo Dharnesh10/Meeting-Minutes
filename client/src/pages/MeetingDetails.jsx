@@ -54,9 +54,11 @@ import {
   MeetingRoom,
   Business,
   Schedule,
+  Assignment,
   Info as InfoIcon
 } from '@mui/icons-material';
 import EndMeetingDialog from '../components/EndMeetingDialog';
+import CreateTaskDialog from '../components/CreateTaskDialog';
 import { CallSplit } from '@mui/icons-material';
 
 function TabPanel({ children, value, index, ...other }) {
@@ -87,6 +89,7 @@ export default function MeetingDetails() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(true);
+  const [createTaskDialog, setCreateTaskDialog] = useState(false);
 
   // Scribe dialog
   const [scribeDialog, setScribeDialog] = useState(false);
@@ -609,6 +612,16 @@ export default function MeetingDetails() {
                 </Button>
               )}
 
+              {permissions.isCreator && meeting.status === 'approved' && (
+                <Button
+                  variant="outlined"
+                  startIcon={<Assignment />}
+                  onClick={() => setCreateTaskDialog(true)}
+                >
+                  Create Tasks
+                </Button>
+              )}
+
               {permissions.canApproveScribe && (
                 <>
                   {!meeting.currentScribe ? (
@@ -1054,6 +1067,17 @@ export default function MeetingDetails() {
           </CardContent>
         </Card>
       )}
+
+      <CreateTaskDialog
+        open={createTaskDialog}
+        onClose={() => setCreateTaskDialog(false)}
+        meeting={meeting}
+        minutes={minutes}
+        onSuccess={() => {
+          setCreateTaskDialog(false);
+          // Optionally show success message
+        }}
+      />
     </Box>
   );
 }

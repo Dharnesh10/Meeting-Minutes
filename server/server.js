@@ -11,6 +11,7 @@ const scheduledMeetingRoutes = require('./routes/scheduledMeetings');
 const meetingMinutesRoutes = require('./routes/meetingMinutes');
 const userActivityRoutes = require('./routes/userActivity');
 const notificationRoutes = require('./routes/notifications');
+const taskRoutes = require('./routes/tasks');
 
 const { autoCancelExpiredMeetings } = require('./services/autoCancelService');
 
@@ -34,6 +35,7 @@ app.use('/api/meetings', scheduledMeetingRoutes);
 app.use('/api/minutes', meetingMinutesRoutes);
 app.use('/api/attendance', userActivityRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/tasks', taskRoutes);
 
 // Get current user info
 app.get('/api/me', require('./middleware/auth'), async (req, res) => {

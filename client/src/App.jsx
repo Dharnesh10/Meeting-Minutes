@@ -8,7 +8,7 @@ import Navbar from './components/Navbar';
 import Home from './components/Home';
 import CreateMeeting from './pages/CreateMeeting';
 import MeetingDetails from './pages/MeetingDetails';
-import Tasks from './pages/Tasks';
+import Tasks from './components/Tasks';
 import RejectedMeetings from './pages/RejectedMeetings';
 import Calendar from './components/Calendar';
 import Login from './components/Login'; // Ensure this component exists

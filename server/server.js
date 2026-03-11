@@ -13,7 +13,8 @@ const userActivityRoutes = require('./routes/userActivity');
 const notificationRoutes = require('./routes/notifications');
 const taskRoutes = require('./routes/tasks');
 
-const { autoCancelExpiredMeetings } = require('./services/autoCancelService');
+// ✅ UPDATED: Import unified auto-complete service
+const { startAutoCompleteMeetingService } = require('./services/autoCompleteMeeting');
 
 const app = express();
 
@@ -49,55 +50,14 @@ app.get('/api/me', require('./middleware/auth'), async (req, res) => {
   }
 });
 
-// ===== THE FIX: AUTOMATIC LIFECYCLE CLEANUP WITH SPECIFIC MESSAGE =====
-
-const cleanOverdueMeetings = async () => {
-  try {
-    const { ScheduledMeeting } = require('./models/scheduledMeeting');
-    const now = new Date();
-
-    // 1. CANCEL Pending meetings that have already started/passed
-    // We set the specific message you requested here
-    const cancelResult = await ScheduledMeeting.updateMany(
-      {
-        status: 'pending_approval',
-        meeting_datetime: { $lt: now }
-      },
-      { 
-        $set: { 
-          status: 'cancelled',
-          cancellationReason: 'Meeting not started by the user! Meeting cancelled due to overtime.' 
-        } 
-      }
-    );
-
-    // 2. COMPLETE Approved meetings that have finished their duration
-    const completeResult = await ScheduledMeeting.updateMany(
-      {
-        status: 'approved',
-        $expr: {
-          $lt: [
-            { $add: ["$meeting_datetime", { $multiply: ["$meeting_duration", 60000] }] }, 
-            now
-          ]
-        }
-      },
-      { $set: { status: 'completed' } }
-    );
-
-    if (cancelResult.modifiedCount > 0 || completeResult.modifiedCount > 0) {
-      console.log(`[CLEANUP] ${cancelResult.modifiedCount} Pending meetings cancelled. ${completeResult.modifiedCount} Approved meetings completed.`);
-    }
-  } catch (err) {
-    console.error('[CLEANUP ERROR]:', err);
-  }
-};
-
-// Check every 60 seconds to keep the HOD Badge accurate
-setInterval(cleanOverdueMeetings, 60000);
-
-// Run on startup
-setTimeout(cleanOverdueMeetings, 3000);
+// ✅ START UNIFIED AUTO-COMPLETE SERVICE
+// This handles:
+// - Auto-complete meetings at END time (not start time)
+// - Auto-cancel unstarted meetings
+// - Auto-reject overtime pending approvals
+// - Send 5-minute end warnings
+// - Send 3-hour meeting reminders
+startAutoCompleteMeetingService();
 
 // ===== ATTENDANCE HEARTBEAT CLEANUP =====
 setInterval(async () => {
@@ -108,7 +68,9 @@ setInterval(async () => {
       { isCurrentlyActive: true, lastHeartbeat: { $lt: staleThreshold } },
       { $set: { isCurrentlyActive: false } }
     );
-  } catch (err) { console.error('Stale cleanup error:', err); }
+  } catch (err) { 
+    console.error('Stale cleanup error:', err); 
+  }
 }, 30000);
 
 // Health check

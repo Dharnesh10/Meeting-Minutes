@@ -149,8 +149,8 @@ export default function Sidebar({ open, setOpen }) {
 
   // UPDATED MENU ITEMS
   const menuItems = [
-    { text: 'Home', icon: <Home />, path: '/' },
     { text: 'Create Meeting', icon: <Add />, path: '/create-meeting' },
+    { text: 'Home', icon: <Home />, path: '/' },
     { 
       text: 'My Meetings', 
       icon: <EventNote />, 

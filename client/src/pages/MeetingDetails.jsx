@@ -90,6 +90,8 @@ export default function MeetingDetails() {
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(true);
   const [createTaskDialog, setCreateTaskDialog] = useState(false);
+  const [canStartMeeting, setCanStartMeeting] = useState(false);
+  const [timeUntilStart, setTimeUntilStart] = useState('');
 
   // Scribe dialog
   const [scribeDialog, setScribeDialog] = useState(false);
@@ -395,6 +397,45 @@ export default function MeetingDetails() {
     }
   };
 
+useEffect(() => {
+  if (!meeting || meeting.meetingStarted || meeting.status !== 'approved') {
+    setCanStartMeeting(false);
+    return;
+  }
+  
+  const checkStartTime = () => {
+    const now = new Date();
+    const meetingStart = new Date(meeting.meeting_datetime);
+    const diff = meetingStart - now;
+    
+    // Can only start if current time >= scheduled time
+    if (diff <= 0) {
+      setCanStartMeeting(true);
+      setTimeUntilStart('');
+    } else {
+      setCanStartMeeting(false);
+      
+      // Calculate countdown
+      const minutes = Math.floor(diff / 60000);
+      const seconds = Math.floor((diff % 60000) / 1000);
+      
+      if (minutes > 0) {
+        setTimeUntilStart(`Starts in ${minutes}m ${seconds}s`);
+      } else {
+        setTimeUntilStart(`Starts in ${seconds}s`);
+      }
+    }
+  };
+  
+  // Check immediately
+  checkStartTime();
+  
+  // Check every second
+  const interval = setInterval(checkStartTime, 1000);
+  
+  return () => clearInterval(interval);
+}, [meeting]);
+
   const handleRemoveScribe = async () => {
     if (!window.confirm('Remove current scribe? You will become the scribe again.')) return;
 
@@ -590,14 +631,16 @@ export default function MeetingDetails() {
         <Card sx={{ mb: 3 }}>
           <CardContent>
             <Stack direction="row" spacing={2} flexWrap="wrap">
-              {!meeting.meetingStarted && (
+              {!meeting.meetingStarted && meeting.status === 'approved' && (
                 <Button
                   variant="contained"
                   color="success"
                   startIcon={<PlayArrow />}
                   onClick={handleStartMeeting}
+                  disabled={!canStartMeeting}
+                  sx={{ mr: 1 }}
                 >
-                  Start Meeting
+                  {canStartMeeting ? 'Start Meeting' : timeUntilStart || 'Waiting...'}
                 </Button>
               )}
 
@@ -612,7 +655,7 @@ export default function MeetingDetails() {
                 </Button>
               )}
 
-              {permissions.isCreator && meeting.status === 'approved' && (
+              {permissions.isCreator && meeting.status === 'approved' && meeting.meetingStarted && !meeting.meetingEnded && (
                 <Button
                   variant="outlined"
                   startIcon={<Assignment />}
@@ -856,6 +899,7 @@ export default function MeetingDetails() {
                         handleAddMinute();
                       }
                     }}
+                    disabled={!meeting.meetingStarted || meeting.meetingEnded}
                   />
                   <IconButton
                     color="primary"

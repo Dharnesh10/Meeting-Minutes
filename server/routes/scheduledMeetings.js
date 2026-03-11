@@ -947,7 +947,270 @@ router.delete('/:id', authMiddleware, async (req, res) => {
   }
 });
 
-// REST OF THE ROUTES (action items, decisions, etc.) remain the same...
-// [Include all other routes from previous file]
+// START MEETING - WITH TIME VALIDATION (NO EARLY START)
+// ============================================
+// REPLACE YOUR /start ROUTE WITH THIS
+// server/routes/scheduledMeetings.js
+// ============================================
+
+// START MEETING - STRICT TIME VALIDATION (NO EARLY START)
+router.post('/:id/start', authMiddleware, async (req, res) => {
+  try {
+    const meeting = await ScheduledMeeting.findById(req.params.id)
+      .populate('createdBy', 'firstName lastName email');
+
+    if (!meeting) {
+      return res.status(404).send({ message: 'Meeting not found' });
+    }
+
+    // ✅ CHECK 1: Only host can start
+    if (meeting.createdBy._id.toString() !== req.user.id) {
+      return res.status(403).send({ 
+        message: 'Only the meeting host can start the meeting' 
+      });
+    }
+
+    // ✅ CHECK 2: Must be approved
+    if (meeting.status !== 'approved') {
+      return res.status(400).send({ 
+        message: 'Meeting must be approved before starting' 
+      });
+    }
+
+    // ✅ CHECK 3: Not already started
+    if (meeting.meetingStarted) {
+      return res.status(400).send({ 
+        message: 'Meeting has already started' 
+      });
+    }
+
+    // ✅ CHECK 4: Not already ended
+    if (meeting.meetingEnded) {
+      return res.status(400).send({ 
+        message: 'Meeting has already ended' 
+      });
+    }
+
+    // ✅ CRITICAL TIME VALIDATION
+    const now = new Date();
+    const meetingStart = new Date(meeting.meeting_datetime);
+    const meetingEnd = new Date(meeting.meeting_end_datetime);
+    
+    console.log('=== START MEETING TIME CHECK ===');
+    console.log('Server time (now):', now.toISOString(), '(', now.toString(), ')');
+    console.log('Meeting scheduled:', meetingStart.toISOString(), '(', meetingStart.toString(), ')');
+    console.log('Time difference (ms):', meetingStart - now);
+    console.log('================================');
+    
+    // ✅ CHECK 5: CANNOT START EARLY - NOT EVEN 1 SECOND
+    if (now < meetingStart) {
+      const timeDiff = meetingStart - now;
+      const minutesRemaining = Math.floor(timeDiff / (60 * 1000));
+      const secondsRemaining = Math.ceil((timeDiff % (60 * 1000)) / 1000);
+      
+      let timeMessage;
+      if (minutesRemaining > 0) {
+        timeMessage = `${minutesRemaining} minute${minutesRemaining !== 1 ? 's' : ''} and ${secondsRemaining} second${secondsRemaining !== 1 ? 's' : ''}`;
+      } else {
+        timeMessage = `${secondsRemaining} second${secondsRemaining !== 1 ? 's' : ''}`;
+      }
+      
+      console.log(`❌ REJECTED: Tried to start ${minutesRemaining}m ${secondsRemaining}s early`);
+      
+      return res.status(400).send({ 
+        message: `Cannot start meeting early. Meeting starts in ${timeMessage}.`,
+        canStartAt: meetingStart,
+        currentTime: now,
+        scheduledTime: meetingStart,
+        earlyBy: timeDiff
+      });
+    }
+
+    // ✅ CHECK 6: Cannot start after meeting expired
+    if (now > meetingEnd) {
+      console.log('❌ REJECTED: Meeting has expired');
+      return res.status(400).send({ 
+        message: 'Cannot start meeting after scheduled end time. Meeting has expired.',
+        meetingExpired: true
+      });
+    }
+
+    // ⚠️ CHECK 7: Warning if starting late (but allow within 10 min grace)
+    const latestStartTime = new Date(meetingStart.getTime() + 10 * 60 * 1000);
+    if (now > latestStartTime) {
+      const minutesLate = Math.ceil((now - latestStartTime) / (60 * 1000));
+      console.log(`⚠️ WARNING: Meeting starting ${minutesLate} minutes late: ${meeting.meeting_name}`);
+    }
+
+    // ✅ ALL CHECKS PASSED - START THE MEETING
+    meeting.meetingStarted = true;
+    meeting.meetingStartedAt = now;
+    meeting.currentScribe = meeting.createdBy._id;
+    
+    await meeting.save();
+
+    // Send notifications
+    try {
+      await Notification.notifyAttendees(
+        meeting,
+        'meeting_started',
+        req.user,
+        req.user.id
+      );
+      console.log('✅ Meeting started notifications sent');
+    } catch (notifError) {
+      console.error('Failed to send start notifications:', notifError);
+    }
+
+    console.log(`✅ APPROVED: Meeting started successfully`);
+    console.log(`   Meeting: ${meeting.meeting_name} (ID: ${meeting.meetingid})`);
+    console.log(`   Scheduled for: ${meetingStart.toISOString()}`);
+    console.log(`   Actually started: ${now.toISOString()}`);
+
+    return res.status(200).send({
+      message: 'Meeting started successfully',
+      meeting,
+      startedAt: now,
+      scheduledStart: meetingStart,
+      scheduledEnd: meetingEnd
+    });
+
+  } catch (error) {
+    console.error('Start meeting error:', error);
+    return res.status(500).send({ message: 'Failed to start meeting' });
+  }
+});
+
+
+// END MEETING - MANUAL END BY HOST
+router.post('/:id/end', authMiddleware, async (req, res) => {
+  try {
+    const { notes } = req.body;
+
+    const meeting = await ScheduledMeeting.findById(req.params.id);
+
+    if (!meeting) {
+      return res.status(404).send({ message: 'Meeting not found' });
+    }
+
+    // Only host can end meeting
+    if (meeting.createdBy.toString() !== req.user.id) {
+      return res.status(403).send({ 
+        message: 'Only the meeting host can end the meeting' 
+      });
+    }
+
+    // Must be started first
+    if (!meeting.meetingStarted) {
+      return res.status(400).send({ 
+        message: 'Meeting has not been started yet' 
+      });
+    }
+
+    // Check if already ended
+    if (meeting.meetingEnded) {
+      return res.status(400).send({ 
+        message: 'Meeting has already ended' 
+      });
+    }
+
+    // End the meeting
+    meeting.meetingEnded = true;
+    meeting.meetingEndedAt = new Date();
+    
+    if (notes) {
+      meeting.endNotes = notes;
+    }
+
+    await meeting.save();
+
+    console.log(`✅ Meeting ended: ${meeting.meeting_name} (ID: ${meeting.meetingid})`);
+
+    return res.status(200).send({
+      message: 'Meeting ended successfully',
+      meeting
+    });
+
+  } catch (error) {
+    console.error('End meeting error:', error);
+    return res.status(500).send({ message: 'Failed to end meeting' });
+  }
+});
+
+
+// EXTEND MEETING DURATION - NEW ROUTE
+router.post('/:id/extend', authMiddleware, async (req, res) => {
+  try {
+    const { additionalMinutes } = req.body; // e.g., 15, 30, 60
+    
+    if (!additionalMinutes || additionalMinutes < 1) {
+      return res.status(400).send({ 
+        message: 'Additional minutes must be a positive number' 
+      });
+    }
+
+    const meeting = await ScheduledMeeting.findById(req.params.id);
+
+    if (!meeting) {
+      return res.status(404).send({ message: 'Meeting not found' });
+    }
+
+    // Only host can extend
+    if (meeting.createdBy.toString() !== req.user.id) {
+      return res.status(403).send({ 
+        message: 'Only the meeting host can extend the meeting' 
+      });
+    }
+
+    // Must be started and not ended
+    if (!meeting.meetingStarted) {
+      return res.status(400).send({ 
+        message: 'Meeting must be started before extending' 
+      });
+    }
+
+    if (meeting.meetingEnded) {
+      return res.status(400).send({ 
+        message: 'Cannot extend an ended meeting' 
+      });
+    }
+
+    // Extend the end time
+    const currentEndTime = new Date(meeting.meeting_end_datetime);
+    const newEndTime = new Date(currentEndTime.getTime() + additionalMinutes * 60 * 1000);
+    
+    meeting.meeting_end_datetime = newEndTime;
+    meeting.meeting_duration += additionalMinutes;
+    
+    // Track extension history
+    if (!meeting.extensionHistory) {
+      meeting.extensionHistory = [];
+    }
+    meeting.extensionHistory.push({
+      extendedBy: req.user.id,
+      extendedAt: new Date(),
+      additionalMinutes,
+      newEndTime
+    });
+
+    // Reset end warning flag so another warning can be sent
+    meeting.endWarningShown = false;
+
+    await meeting.save();
+
+    console.log(`⏱️  Meeting extended by ${additionalMinutes} minutes: ${meeting.meeting_name}`);
+
+    return res.status(200).send({
+      message: `Meeting extended by ${additionalMinutes} minutes`,
+      newEndTime,
+      meeting
+    });
+
+  } catch (error) {
+    console.error('Extend meeting error:', error);
+    return res.status(500).send({ message: 'Failed to extend meeting' });
+  }
+});
+
 
 module.exports = router;

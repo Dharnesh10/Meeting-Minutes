@@ -17,8 +17,8 @@ import { Visibility, VisibilityOff } from '@mui/icons-material';
 
 export default function Login() {
   const [data, setData] = useState({
-    email: '',
-    password: ''
+    email: 'it001@college.edu',
+    password: 'Password@123'
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);

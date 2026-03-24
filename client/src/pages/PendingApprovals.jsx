@@ -78,7 +78,7 @@ export default function PendingApprovals() {
     }
 
     try {
-      const res = await fetch(`http://localhost:5000/api/meetings/${approvalDialog.meeting._id}/${endpoint}`, {
+      const res = await fetch(`${API_CONFIG.baseURL}/meetings/${approvalDialog.meeting._id}/${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

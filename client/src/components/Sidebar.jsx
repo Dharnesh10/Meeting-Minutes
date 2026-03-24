@@ -128,7 +128,7 @@ export default function Sidebar({ open, setOpen }) {
     try {
       const token = localStorage.getItem('token');
       if(!token) return;
-      const res = await fetch('http://localhost:5000/api/meetings/pending-count', {
+      const res = await fetch(`${API_CONFIG.baseURL}/meetings/pending-count`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if(res.ok) {

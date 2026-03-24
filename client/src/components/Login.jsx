@@ -14,6 +14,7 @@ import {
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
+import API_CONFIG from '../config/api';
 
 export default function Login() {
   const [data, setData] = useState({
@@ -39,7 +40,7 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5000/api/auth', {
+      const response = await fetch(`${API_CONFIG.baseURL}/auth`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

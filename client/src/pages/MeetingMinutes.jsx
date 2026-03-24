@@ -95,7 +95,7 @@ export default function MeetingMinutes() {
 
   const fetchMinutes = async () => {
     try {
-      const res = await fetch(`http://localhost:5000/api/minutes/${meetingId}`, {
+      const res = await fetch(`${API_CONFIG.baseURL}/minutes/${meetingId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -121,7 +121,7 @@ export default function MeetingMinutes() {
 
   const fetchAttendees = async () => {
     try {
-      const res = await fetch(`http://localhost:5000/api/meetings/${meetingId}`, {
+      const res = await fetch(`${API_CONFIG.baseURL}/meetings/${meetingId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -137,7 +137,7 @@ export default function MeetingMinutes() {
   const pollForUpdates = async () => {
     try {
       const res = await fetch(
-        `http://localhost:5000/api/minutes/${meetingId}/poll?lastUpdate=${lastUpdate}`,
+        `${API_CONFIG.baseURL}/minutes/${meetingId}/poll?lastUpdate=${lastUpdate}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
@@ -188,7 +188,7 @@ export default function MeetingMinutes() {
     if (!newMinute.trim()) return;
 
     try {
-      const res = await fetch(`http://localhost:5000/api/minutes/${meetingId}`, {
+      const res = await fetch(`${API_CONFIG.baseURL}/minutes/${meetingId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -225,7 +225,7 @@ export default function MeetingMinutes() {
 
     try {
       const res = await fetch(
-        `http://localhost:5000/api/minutes/${meetingId}/${editingMinute._id}`,
+        `${API_CONFIG.baseURL}/minutes/${meetingId}/${editingMinute._id}`,
         {
           method: 'PUT',
           headers: {
@@ -258,7 +258,7 @@ export default function MeetingMinutes() {
 
     try {
       const res = await fetch(
-        `http://localhost:5000/api/minutes/${meetingId}/${minuteId}`,
+        `${API_CONFIG.baseURL}/minutes/${meetingId}/${minuteId}`,
         {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${token}` }
@@ -282,7 +282,7 @@ export default function MeetingMinutes() {
   const handleApproveScribe = async (userId) => {
     try {
       const res = await fetch(
-        `http://localhost:5000/api/minutes/${meetingId}/scribe/approve`,
+        `${API_CONFIG.baseURL}/minutes/${meetingId}/scribe/approve`,
         {
           method: 'POST',
           headers: {
@@ -314,7 +314,7 @@ export default function MeetingMinutes() {
 
     try {
       const res = await fetch(
-        `http://localhost:5000/api/minutes/${meetingId}/scribe/remove`,
+        `${API_CONFIG.baseURL}/minutes/${meetingId}/scribe/remove`,
         {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` }
@@ -339,7 +339,7 @@ export default function MeetingMinutes() {
   const handleStartMeeting = async () => {
     try {
       const res = await fetch(
-        `http://localhost:5000/api/minutes/${meetingId}/start`,
+        `${API_CONFIG.baseURL}/minutes/${meetingId}/start`,
         {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` }
@@ -366,7 +366,7 @@ export default function MeetingMinutes() {
 
     try {
       const res = await fetch(
-        `http://localhost:5000/api/minutes/${meetingId}/end`,
+        `${API_CONFIG.baseURL}/minutes/${meetingId}/end`,
         {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` }

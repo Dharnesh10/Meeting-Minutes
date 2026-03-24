@@ -142,7 +142,7 @@ export default function MeetingDetails() {
 
   const fetchMeeting = async () => {
     try {
-      const res = await fetch(`http://localhost:5000/api/meetings/${meetingId}`, {
+      const res = await fetch(`${API_CONFIG.baseURL}/meetings/${meetingId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -167,7 +167,7 @@ export default function MeetingDetails() {
 
   const fetchMinutes = async () => {
     try {
-      const res = await fetch(`http://localhost:5000/api/minutes/${meetingId}`, {
+      const res = await fetch(`${API_CONFIG.baseURL}/minutes/${meetingId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -184,7 +184,7 @@ export default function MeetingDetails() {
 
   const fetchAttendance = async () => {
     try {
-      const res = await fetch(`http://localhost:5000/api/attendance/${meetingId}`, {
+      const res = await fetch(`${API_CONFIG.baseURL}/attendance/${meetingId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -201,7 +201,7 @@ export default function MeetingDetails() {
     // Send heartbeat every 5 seconds to mark user as online
     heartbeatInterval.current = setInterval(async () => {
       try {
-        await fetch(`http://localhost:5000/api/attendance/${meetingId}/heartbeat`, {
+        await fetch(`${API_CONFIG.baseURL}/attendance/${meetingId}/heartbeat`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` }
         });
@@ -218,7 +218,7 @@ export default function MeetingDetails() {
     
     // Mark user as offline
     try {
-      await fetch(`http://localhost:5000/api/attendance/${meetingId}/leave`, {
+      await fetch(`${API_CONFIG.baseURL}/attendance/${meetingId}/leave`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -230,7 +230,7 @@ export default function MeetingDetails() {
   const pollForUpdates = async () => {
     try {
       const res = await fetch(
-        `http://localhost:5000/api/minutes/${meetingId}/poll?lastUpdate=${lastUpdate}`,
+        `${API_CONFIG.baseURL}/minutes/${meetingId}/poll?lastUpdate=${lastUpdate}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
@@ -276,7 +276,7 @@ export default function MeetingDetails() {
     if (!newMinute.trim()) return;
 
     try {
-      const res = await fetch(`http://localhost:5000/api/minutes/${meetingId}`, {
+      const res = await fetch(`${API_CONFIG.baseURL}/minutes/${meetingId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -313,7 +313,7 @@ export default function MeetingDetails() {
 
     try {
       const res = await fetch(
-        `http://localhost:5000/api/minutes/${meetingId}/${editingMinute._id}`,
+        `${API_CONFIG.baseURL}/minutes/${meetingId}/${editingMinute._id}`,
         {
           method: 'PUT',
           headers: {
@@ -346,7 +346,7 @@ export default function MeetingDetails() {
 
     try {
       const res = await fetch(
-        `http://localhost:5000/api/minutes/${meetingId}/${minuteId}`,
+        `${API_CONFIG.baseURL}/minutes/${meetingId}/${minuteId}`,
         {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${token}` }
@@ -370,7 +370,7 @@ export default function MeetingDetails() {
   const handleApproveScribe = async (userId) => {
     try {
       const res = await fetch(
-        `http://localhost:5000/api/minutes/${meetingId}/scribe/approve`,
+        `${API_CONFIG.baseURL}/minutes/${meetingId}/scribe/approve`,
         {
           method: 'POST',
           headers: {
@@ -441,7 +441,7 @@ useEffect(() => {
 
     try {
       const res = await fetch(
-        `http://localhost:5000/api/minutes/${meetingId}/scribe/remove`,
+        `${API_CONFIG.baseURL}/minutes/${meetingId}/scribe/remove`,
         {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` }
@@ -466,7 +466,7 @@ useEffect(() => {
   const handleStartMeeting = async () => {
     try {
       const res = await fetch(
-        `http://localhost:5000/api/minutes/${meetingId}/start`,
+        `${API_CONFIG.baseURL}/minutes/${meetingId}/start`,
         {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` }
@@ -491,7 +491,7 @@ useEffect(() => {
   const handleEndMeeting = async (completionData) => {
     try {
       const res = await fetch(
-        `http://localhost:5000/api/minutes/${meeting._id}/end`,
+        `${API_CONFIG.baseURL}/minutes/${meeting._id}/end`,
         {
           method: 'POST',
           headers: {
@@ -504,7 +504,7 @@ useEffect(() => {
       if (res.ok) {
         if (completionData) {
           await fetch(
-            `http://localhost:5000/api/meetings/${meeting._id}/complete`,
+            `${API_CONFIG.baseURL}/meetings/${meeting._id}/complete`,
             {
               method: 'POST',
               headers: {

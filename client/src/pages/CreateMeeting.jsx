@@ -108,7 +108,7 @@ export default function CreateMeeting() {
   const loadMeetingData = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`http://localhost:5000/api/meetings/${id}`, {
+      const res = await fetch(`${API_CONFIG.baseURL}/meetings/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -154,7 +154,7 @@ export default function CreateMeeting() {
   const loadParentMeetingData = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`http://localhost:5000/api/meetings/${followupMeetingId}`, {
+      const res = await fetch(`${API_CONFIG.baseURL}/meetings/${followupMeetingId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -203,7 +203,7 @@ export default function CreateMeeting() {
 
   const fetchDepartments = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/departments', {
+      const res = await fetch(`${API_CONFIG.baseURL}/departments`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
@@ -215,7 +215,7 @@ export default function CreateMeeting() {
 
   const fetchVenues = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/venues', {
+      const res = await fetch(`${API_CONFIG.baseURL}/venues`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
@@ -231,7 +231,7 @@ export default function CreateMeeting() {
     try {
       const startTime = `${formData.meeting_date}T${formData.meeting_time}:00`;
       
-      const res = await fetch('http://localhost:5000/api/venues/check-availability', {
+      const res = await fetch(`${API_CONFIG.baseURL}/venues/check-availability`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -255,7 +255,7 @@ export default function CreateMeeting() {
   const searchUsers = async () => {
     try {
       const res = await fetch(
-        `http://localhost:5000/api/meetings/search/users?query=${userSearch}`,
+        `${API_CONFIG.baseURL}/meetings/search/users?query=${userSearch}`,
         {
           headers: { Authorization: `Bearer ${token}` }
         }
@@ -361,8 +361,8 @@ export default function CreateMeeting() {
       };
 
       const url = isEditMode 
-        ? `http://localhost:5000/api/meetings/${id}`
-        : 'http://localhost:5000/api/meetings';
+        ? `${API_CONFIG.baseURL}/meetings/${id}`
+        : `${API_CONFIG.baseURL}/meetings`;
 
       const method = isEditMode ? 'PUT' : 'POST';
 
@@ -390,7 +390,7 @@ export default function CreateMeeting() {
       if (isEditMode) {
         setSuccess('Meeting updated successfully');
       } else if (isFollowupMode) {
-        await fetch(`http://localhost:5000/api/minutes/${followupMeetingId}/end`, {
+        await fetch(`${API_CONFIG.baseURL}/minutes/${followupMeetingId}/end`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

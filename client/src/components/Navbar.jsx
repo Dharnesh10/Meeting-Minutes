@@ -82,7 +82,7 @@ useEffect(() => {
 
   const fetchNotifications = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/notifications', {
+      const res = await fetch(`${API_CONFIG.baseURL}/notifications`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -112,7 +112,7 @@ useEffect(() => {
   const handleNotificationItemClick = async (notification) => {
     try {
       if (!notification.read) {
-        await fetch(`http://localhost:5000/api/notifications/${notification._id}/read`, {
+        await fetch(`${API_CONFIG.baseURL}/notifications/${notification._id}/read`, {
           method: 'PATCH',
           headers: { Authorization: `Bearer ${token}` }
         });
@@ -135,7 +135,7 @@ useEffect(() => {
 
   const handleMarkAllRead = async () => {
     try {
-      await fetch('http://localhost:5000/api/notifications/read-all', {
+      await fetch(`${API_CONFIG.baseURL}/notifications/read-all`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}` }
       });

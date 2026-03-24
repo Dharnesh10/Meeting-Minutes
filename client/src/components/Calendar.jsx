@@ -63,7 +63,7 @@ export default function Calendar() {
 
   const fetchMeetings = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/meetings', {
+      const res = await fetch(`${API_CONFIG.baseURL}/meetings`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {

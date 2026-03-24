@@ -60,6 +60,7 @@ import {
 import EndMeetingDialog from '../components/EndMeetingDialog';
 import CreateTaskDialog from '../components/CreateTaskDialog';
 import { CallSplit } from '@mui/icons-material';
+import API_CONFIG from '../config/api';
 
 function TabPanel({ children, value, index, ...other }) {
   return (

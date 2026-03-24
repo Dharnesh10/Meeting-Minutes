@@ -46,6 +46,7 @@ import {
   Info
 } from '@mui/icons-material';
 import { useSearchParams } from 'react-router-dom';
+import API_CONFIG from '../config/api';
 
 export default function CreateMeeting() {
   const { id } = useParams();

@@ -35,6 +35,7 @@ import {
   HourglassEmpty,
   EventAvailable
 } from '@mui/icons-material';
+import API_CONFIG from '../config/api';
 
 export default function Calendar() {
   const navigate = useNavigate();

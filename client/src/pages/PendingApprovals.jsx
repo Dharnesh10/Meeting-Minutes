@@ -29,6 +29,7 @@ import {
   Business,
   PriorityHigh
 } from '@mui/icons-material';
+import API_CONFIG from '../config/api';
 
 export default function PendingApprovals() {
   const navigate = useNavigate();
@@ -49,7 +50,7 @@ export default function PendingApprovals() {
     setLoading(true);
     try {
       // Assuming your API supports a status filter
-      const res = await fetch('http://localhost:5000/api/meetings?status=pending_approval', {
+      const res = await fetch(`${API_CONFIG.baseURL}/meetings?status=pending_approval`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {

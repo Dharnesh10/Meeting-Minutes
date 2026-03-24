@@ -24,6 +24,7 @@ import {
   Visibility,
   Cancel
 } from '@mui/icons-material';
+import API_CONFIG from '../config/api';
 
 export default function RejectedMeetings() {
   const navigate = useNavigate();
@@ -47,7 +48,7 @@ export default function RejectedMeetings() {
 
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:5000/api/meetings/rejected-cancelled', {
+      const res = await fetch(`${API_CONFIG.baseURL}/meetings/rejected-cancelled`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 

@@ -33,6 +33,7 @@ import {
   Event
 } from '@mui/icons-material';
 import { jwtDecode } from 'jwt-decode';
+import API_CONFIG from '../config/api';
 
 export default function Navbar({ sidebarOpen, toggleTheme, themeMode }) {
   const navigate = useNavigate();

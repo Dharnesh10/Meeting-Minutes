@@ -46,6 +46,7 @@ import {
   AccessTime,
   Person
 } from '@mui/icons-material';
+import API_CONFIG from '../config/api';
 
 export default function MeetingMinutes() {
   const [searchParams] = useSearchParams();

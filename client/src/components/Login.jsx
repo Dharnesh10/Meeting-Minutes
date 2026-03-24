@@ -40,7 +40,7 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const response = await fetch(`${API_CONFIG.baseURL}/auth`, {
+      const response = await fetch(`${API_CONFIG.baseURL}/api/auth`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

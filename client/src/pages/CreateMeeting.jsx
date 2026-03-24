@@ -315,113 +315,136 @@ export default function CreateMeeting() {
     });
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-    setError('');
-    setSuccess('');
+// FIND THIS SECTION IN CreateMeeting.jsx (around line 350-390)
+// REPLACE the handleSubmit function's date/time handling
 
-    if (!token) {
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setSaving(true);
+  setError('');
+  setSuccess('');
+
+  if (!token) {
+    window.location.href = '/login';
+    return;
+  }
+
+  if (formData.selectedUsers.length === 0 && formData.selectedDepartments.length === 0) {
+    setError('Please add at least one attendee or select a department');
+    setSaving(false);
+    return;
+  }
+
+  if (venueAvailability && !venueAvailability.available) {
+    setError('Selected venue is not available for this time slot');
+    setSaving(false);
+    return;
+  }
+
+  if (Number(formData.meeting_duration) < 15) {
+    setError('Meeting duration must be at least 15 minutes');
+    setSaving(false);
+    return;
+  }
+
+  try {
+    // ✅ FIX: Create local datetime without timezone conversion
+    const localDateTime = new Date(`${formData.meeting_date}T${formData.meeting_time}:00`);
+    
+    // ✅ FIX: Get date/time components in local timezone
+    const year = localDateTime.getFullYear();
+    const month = String(localDateTime.getMonth() + 1).padStart(2, '0');
+    const day = String(localDateTime.getDate()).padStart(2, '0');
+    const hours = String(localDateTime.getHours()).padStart(2, '0');
+    const minutes = String(localDateTime.getMinutes()).padStart(2, '0');
+    
+    // ✅ FIX: Send as separate date and time strings (no timezone conversion)
+    const meeting_date = `${year}-${month}-${day}`;
+    const meeting_time = `${hours}:${minutes}`;
+
+    console.log('📅 Creating meeting:');
+    console.log('   Input date:', formData.meeting_date);
+    console.log('   Input time:', formData.meeting_time);
+    console.log('   Sending date:', meeting_date);
+    console.log('   Sending time:', meeting_time);
+
+    const payload = {
+      meeting_name: formData.meeting_name,
+      meeting_description: formData.meeting_description,
+      meeting_date: meeting_date,  // ✅ Use fixed date
+      meeting_time: meeting_time,  // ✅ Use fixed time
+      meeting_duration: formData.meeting_duration,
+      venue: formData.venue,
+      meetingType: formData.meetingType,
+      priority: formData.priority,
+      attendees: formData.selectedUsers.map(u => u._id || u.id).filter(Boolean),
+      departments: formData.selectedDepartments,
+      agenda: formData.agenda.filter(a => a.title),
+      isFollowup: isFollowupMode,
+      parentMeetingId: followupMeetingId || null
+    };
+
+    const url = isEditMode 
+      ? `${API_CONFIG.baseURL}/meetings/${id}`
+      : `${API_CONFIG.baseURL}/meetings`;
+
+    const method = isEditMode ? 'PUT' : 'POST';
+
+    const res = await fetch(url, {
+      method: method,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+
+    if (res.status === 401) {
+      localStorage.clear();
       window.location.href = '/login';
       return;
     }
 
-    if (formData.selectedUsers.length === 0 && formData.selectedDepartments.length === 0) {
-      setError('Please add at least one attendee or select a department');
-      setSaving(false);
-      return;
+    if (!res.ok) {
+      throw new Error(data.message || 'Failed to save meeting');
     }
 
-    if (venueAvailability && !venueAvailability.available) {
-      setError('Selected venue is not available for this time slot');
-      setSaving(false);
-      return;
-    }
-
-    if (Number(formData.meeting_duration) < 15) {
-      setError('Meeting duration must be at least 15 minutes');
-      setSaving(false);
-      return;
-    }
-
-    try {
-      const payload = {
-        meeting_name: formData.meeting_name,
-        meeting_description: formData.meeting_description,
-        meeting_date: formData.meeting_date,
-        meeting_time: formData.meeting_time,
-        meeting_duration: formData.meeting_duration,
-        venue: formData.venue,
-        meetingType: formData.meetingType,
-        priority: formData.priority,
-        attendees: formData.selectedUsers.map(u => u._id || u.id).filter(Boolean),
-        departments: formData.selectedDepartments,
-        agenda: formData.agenda.filter(a => a.title),
-        isFollowup: isFollowupMode,
-        parentMeetingId: followupMeetingId || null
-      };
-
-      const url = isEditMode 
-        ? `${API_CONFIG.baseURL}/meetings/${id}`
-        : `${API_CONFIG.baseURL}/meetings`;
-
-      const method = isEditMode ? 'PUT' : 'POST';
-
-      const res = await fetch(url, {
-        method: method,
+    if (isEditMode) {
+      setSuccess('Meeting updated successfully');
+    } else if (isFollowupMode) {
+      await fetch(`${API_CONFIG.baseURL}/minutes/${followupMeetingId}/end`, {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(payload)
+        }
       });
-
-      const data = await res.json();
-
-      if (res.status === 401) {
-        localStorage.clear();
-        window.location.href = '/login';
-        return;
-      }
-
-      if (!res.ok) {
-        throw new Error(data.message || 'Failed to save meeting');
-      }
-
-      if (isEditMode) {
-        setSuccess('Meeting updated successfully');
-      } else if (isFollowupMode) {
-        await fetch(`${API_CONFIG.baseURL}/minutes/${followupMeetingId}/end`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          }
-        });
-        
-        setSuccess('Follow-up meeting created successfully');
+      
+      setSuccess('Follow-up meeting created successfully');
+    } else {
+      if (data.requiresApproval) {
+        setSuccess(`Meeting created - ID: ${data.meeting.meetingid}. Sent for approval.`);
       } else {
-        if (data.requiresApproval) {
-          setSuccess(`Meeting created - ID: ${data.meeting.meetingid}. Sent for approval.`);
-        } else {
-          setSuccess(`Meeting created and approved - ID: ${data.meeting.meetingid}`);
-        }
+        setSuccess(`Meeting created and approved - ID: ${data.meeting.meetingid}`);
       }
-
-      setTimeout(() => {
-        if (isEditMode) {
-          navigate(`/meeting-details?id=${id}`);
-          window.location.reload();
-        } else {
-          navigate('/');
-        }
-      }, 1500);
-
-    } catch (err) {
-      setError(err.message || 'Failed to save meeting');
-      setSaving(false);
     }
-  };
+
+    setTimeout(() => {
+      if (isEditMode) {
+        navigate(`/meeting-details?id=${id}`);
+        window.location.reload();
+      } else {
+        navigate('/');
+      }
+    }, 1500);
+
+  } catch (err) {
+    setError(err.message || 'Failed to save meeting');
+    setSaving(false);
+  }
+};
 
   if (loading) {
     return (

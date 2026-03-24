@@ -534,20 +534,21 @@ useEffect(() => {
   };
 
   const formatTime = (date) => {
-    return new Date(date).toLocaleTimeString('en-US', {
+    const d = new Date(date);
+    return d.toLocaleTimeString('en-IN', {
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
+      hour12: true
     });
   };
 
   const formatDate = (date) => {
-    return new Date(date).toLocaleDateString('en-US', {
+    const d = new Date(date);
+    return d.toLocaleDateString('en-IN', {
       month: 'short',
       day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+      year: 'numeric'
+    }) + ' at ' + formatTime(date);
   };
 
   const formatDuration = (seconds) => {

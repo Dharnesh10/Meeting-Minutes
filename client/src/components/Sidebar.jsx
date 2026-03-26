@@ -42,7 +42,6 @@ export default function Sidebar({ open, setOpen }) {
     }
     fetchPendingCount();
 
-    // Check if mobile on mount and on resize
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 768);
     };
@@ -104,18 +103,18 @@ export default function Sidebar({ open, setOpen }) {
         <div className="mb-1">
           <button
             onClick={() => setPaymentsOpen(!paymentsOpen)}
-            className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 group
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group
               ${hasSubmenuActive 
-                ? 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500' 
+                ? 'bg-primary-50 dark:bg-primary-900/20 border-l-4 border-primary-500' 
                 : 'hover:bg-gray-100 dark:hover:bg-gray-800 border-l-4 border-transparent'
               }`}
           >
-            <div className={`min-w-[40px] ${hasSubmenuActive ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}>
+            <div className={`min-w-[40px] ${hasSubmenuActive ? 'text-primary-600 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400'}`}>
               <Icon size={20} />
             </div>
             {(isOpen || isMobileDevice) && (
               <>
-                <span className={`flex-1 text-left text-sm font-medium ${hasSubmenuActive ? 'text-blue-600 dark:text-blue-400 font-semibold' : 'text-gray-700 dark:text-gray-300'}`}>
+                <span className={`flex-1 text-left text-sm font-medium ${hasSubmenuActive ? 'text-primary-600 dark:text-primary-400 font-semibold' : 'text-gray-700 dark:text-gray-300'}`}>
                   {item.text}
                 </span>
                 {paymentsOpen ? <ChevronUp size={18} className="text-gray-500" /> : <ChevronDown size={18} className="text-gray-500" />}
@@ -134,7 +133,7 @@ export default function Sidebar({ open, setOpen }) {
                     onClick={handleItemClick}
                     className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200
                       ${subActive 
-                        ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' 
+                        ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400' 
                         : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
                       }`}
                   >
@@ -155,13 +154,13 @@ export default function Sidebar({ open, setOpen }) {
       <Link
         to={item.path}
         onClick={handleItemClick}
-        className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 group mb-1
+        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group mb-1
           ${active 
-            ? 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 text-blue-600 dark:text-blue-400' 
+            ? 'bg-primary-50 dark:bg-primary-900/20 border-l-4 border-primary-500 text-primary-600 dark:text-primary-400' 
             : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 border-l-4 border-transparent'
           }`}
       >
-        <div className={`min-w-[40px] ${active ? 'text-blue-500' : 'group-hover:text-gray-900 dark:group-hover:text-gray-200'}`}>
+        <div className={`min-w-[40px] ${active ? 'text-primary-500' : 'group-hover:text-gray-900 dark:group-hover:text-gray-200'}`}>
           <Icon size={20} />
         </div>
         {(isOpen || isMobileDevice) && (
@@ -180,7 +179,7 @@ export default function Sidebar({ open, setOpen }) {
         {(isOpen || isMobileDevice) ? (
           <>
             <div className="flex items-center gap-3 flex-1 min-w-0">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center text-white font-semibold shadow-md">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-r from-primary-500 to-primary-600 flex items-center justify-center text-white font-semibold shadow-md">
                 {name.charAt(0).toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
@@ -198,14 +197,14 @@ export default function Sidebar({ open, setOpen }) {
             )}
           </>
         ) : (
-          <div className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center text-white font-semibold shadow-md">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-r from-primary-500 to-primary-600 flex items-center justify-center text-white font-semibold shadow-md">
             {name.charAt(0).toUpperCase()}
           </div>
         )}
       </div>
 
       {/* Menu Items */}
-      <div className="flex-1 px-3 py-4 overflow-y-auto">
+      <div className="flex-1 px-3 py-4 overflow-y-auto sidebar-scroll">
         {menuItems.map((item) => (
           <MenuItem key={item.text} item={item} isOpen={isOpen} isMobileDevice={isMobileDevice} />
         ))}
@@ -215,7 +214,7 @@ export default function Sidebar({ open, setOpen }) {
       <div className="p-3 border-t border-gray-200 dark:border-gray-800">
         <button
           onClick={handleLogout}
-          className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 group
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group
             ${isOpen || isMobileDevice ? '' : 'justify-center'}
             hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400`}
         >
@@ -256,7 +255,7 @@ export default function Sidebar({ open, setOpen }) {
       {!open && !isMobile && (
         <button
           onClick={() => setOpen(true)}
-          className="fixed top-5 left-5 z-40 p-2.5 bg-white dark:bg-gray-800 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 hidden md:flex items-center justify-center border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-700"
+          className="fixed top-5 left-5 z-40 p-2.5 bg-white dark:bg-gray-800 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 hidden md:flex items-center justify-center border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700"
         >
           <ChevronRight size={20} className="text-gray-600 dark:text-gray-400" />
         </button>
@@ -266,7 +265,7 @@ export default function Sidebar({ open, setOpen }) {
       {!open && isMobile && (
         <button
           onClick={() => setOpen(true)}
-          className="fixed bottom-5 right-5 z-40 p-3.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200 md:hidden hover:scale-105"
+          className="fixed bottom-5 right-5 z-40 p-3.5 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200 md:hidden hover:scale-105"
         >
           <ChevronRight size={20} />
         </button>

@@ -1,35 +1,117 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { styled, alpha, useTheme } from '@mui/material/styles';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import { jwtDecode } from 'jwt-decode';
 import {
+  Drawer,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  IconButton,
+  Divider,
+  Tooltip,
+  Box,
+  Typography,
+  Avatar,
+  Badge,
+  Collapse
+} from '@mui/material';
+
+import {
   Home,
-  LogOut,
-  CheckSquare,
-  Ban,
-  Calendar,
+  Logout,
+  PlaylistAddCheck,
+  Block,
+  CalendarMonth,
   ChevronLeft,
   ChevronRight,
-  Plus,
-  CalendarDays,
-  ChevronDown,
-  ChevronUp,
-  Circle,
-  XCircle
-} from 'lucide-react';
-
+  Add,
+  EventNote,
+  ExpandLess,
+  ExpandMore,
+  Circle
+} from '@mui/icons-material';
 import API_CONFIG from '../config/api';
+
+const drawerWidthOpen = 280;
+const drawerWidthClosed = 70;
+
+// ... (Keep StyledDrawer, StyledListItemButton, NestedListItemButton definitions exactly as before) ...
+const StyledDrawer = styled(Drawer, {
+  shouldForwardProp: (prop) => prop !== 'open',
+})(({ theme, open }) => ({
+  width: open ? drawerWidthOpen : drawerWidthClosed,
+  flexShrink: 0,
+  whiteSpace: 'nowrap',
+  boxSizing: 'border-box',
+  display: 'none', 
+  [theme.breakpoints.up('md')]: {
+    display: 'block',
+  },
+  transition: theme.transitions.create('width', {
+    easing: theme.transitions.easing.sharp,
+    duration: theme.transitions.duration.enteringScreen,
+  }),
+  '& .MuiDrawer-paper': {
+    width: open ? drawerWidthOpen : drawerWidthClosed,
+    transition: theme.transitions.create('width', {
+      easing: theme.transitions.easing.sharp,
+      duration: theme.transitions.duration.enteringScreen,
+    }),
+    overflowX: 'hidden',
+    backgroundColor: theme.palette.mode === 'dark' ? '#1a1a1a' : '#ffffff',
+    borderRight: `1px solid ${theme.palette.divider}`,
+  },
+}));
+
+const StyledListItemButton = styled(ListItemButton, {
+  shouldForwardProp: (prop) => prop !== 'active',
+})(({ theme, active }) => ({
+  borderRadius: theme.spacing(1),
+  margin: theme.spacing(0.5, 1),
+  padding: theme.spacing(1.25, 1.5),
+  minHeight: 48,
+  transition: 'all 0.2s',
+  backgroundColor: active 
+    ? theme.palette.mode === 'dark'
+      ? alpha(theme.palette.primary.main, 0.2)
+      : alpha(theme.palette.primary.main, 0.1)
+    : 'transparent',
+  borderLeft: active ? `3px solid ${theme.palette.primary.main}` : '3px solid transparent',
+  '&:hover': {
+    backgroundColor: theme.palette.mode === 'dark'
+      ? alpha(theme.palette.primary.main, 0.15)
+      : alpha(theme.palette.primary.main, 0.08),
+  },
+}));
+
+const NestedListItemButton = styled(ListItemButton)(({ theme }) => ({
+  borderRadius: theme.spacing(1),
+  margin: theme.spacing(0.5, 1, 0.5, 2),
+  paddingLeft: theme.spacing(4),
+  minHeight: 40,
+  transition: 'all 0.2s',
+  '&:hover': {
+    backgroundColor: theme.palette.mode === 'dark'
+      ? alpha(theme.palette.primary.main, 0.1)
+      : alpha(theme.palette.primary.main, 0.05),
+  },
+}));
 
 export default function Sidebar({ open, setOpen }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   
   const [name, setName] = useState('User');
   const [email, setEmail] = useState('');
   const [pendingCount, setPendingCount] = useState(0);
   const [paymentsOpen, setPaymentsOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
 
-  useEffect(() => {
+  React.useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) return;
 
@@ -41,13 +123,6 @@ export default function Sidebar({ open, setOpen }) {
       console.error('Failed to decode token:', error);
     }
     fetchPendingCount();
-
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
   }, [navigate]);
 
   const fetchPendingCount = async () => {
@@ -73,202 +148,175 @@ export default function Sidebar({ open, setOpen }) {
 
   const isActive = (path) => location.pathname === path;
 
+  // UPDATED MENU ITEMS
   const menuItems = [
-    { text: 'Create Meeting', icon: Plus, path: '/create-meeting' },
-    { text: 'Home', icon: Home, path: '/' },
+    { text: 'Create Meeting', icon: <Add />, path: '/create-meeting' },
+    { text: 'Home', icon: <Home />, path: '/' },
     { 
       text: 'My Meetings', 
-      icon: CalendarDays, 
+      icon: <EventNote />, 
       submenu: [
         { text: 'Scheduled', path: '/my-meetings/scheduled' },
         { text: 'Completed', path: '/my-meetings/completed' },
       ]
     },
-    { text: 'Rejected', icon: XCircle, path: '/rejected-meetings' },
-    { text: 'Tasks', icon: CheckSquare, path: '/tasks'},
-    { text: 'Calendar', icon: Calendar, path: '/calendar' },
+    { text: 'Rejected', icon: <Block />, path: '/rejected-meetings' },
+    { text: 'Tasks', icon: <PlaylistAddCheck />, path: '/tasks'},
+    { text: 'Calendar', icon: <CalendarMonth />, path: '/calendar' },
   ];
 
   const handleItemClick = () => {
     if (isMobile) setOpen(false);
   };
 
-  const MenuItem = ({ item, isOpen, isMobileDevice }) => {
-    const active = !item.submenu && isActive(item.path);
-    const Icon = item.icon;
-    const hasSubmenuActive = item.submenu?.some(sub => location.pathname.includes(sub.path));
-    
-    if (item.submenu) {
-      return (
-        <div className="mb-1">
-          <button
-            onClick={() => setPaymentsOpen(!paymentsOpen)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group
-              ${hasSubmenuActive 
-                ? 'bg-primary-50 dark:bg-primary-900/20 border-l-4 border-primary-500' 
-                : 'hover:bg-gray-100 dark:hover:bg-gray-800 border-l-4 border-transparent'
-              }`}
-          >
-            <div className={`min-w-[40px] ${hasSubmenuActive ? 'text-primary-600 dark:text-primary-400' : 'text-gray-500 dark:text-gray-400'}`}>
-              <Icon size={20} />
-            </div>
-            {(isOpen || isMobileDevice) && (
-              <>
-                <span className={`flex-1 text-left text-sm font-medium ${hasSubmenuActive ? 'text-primary-600 dark:text-primary-400 font-semibold' : 'text-gray-700 dark:text-gray-300'}`}>
-                  {item.text}
-                </span>
-                {paymentsOpen ? <ChevronUp size={18} className="text-gray-500" /> : <ChevronDown size={18} className="text-gray-500" />}
-              </>
-            )}
-          </button>
-          
-          {paymentsOpen && (isOpen || isMobileDevice) && (
-            <div className="mt-1 ml-11 pl-2 space-y-1">
-              {item.submenu.map((subItem) => {
-                const subActive = isActive(subItem.path);
-                return (
-                  <Link
-                    key={subItem.text}
-                    to={subItem.path}
-                    onClick={handleItemClick}
-                    className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200
-                      ${subActive 
-                        ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400' 
-                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-                      }`}
-                  >
-                    <div className="min-w-[30px]">
-                      <Circle size={8} className="fill-current" />
-                    </div>
-                    <span className="text-sm">{subItem.text}</span>
-                  </Link>
-                );
-              })}
-            </div>
+  const drawerContent = (
+    <>
+      <Box sx={{ 
+        display: 'flex', alignItems: 'center', padding: theme.spacing(2, 1.5), minHeight: 72, justifyContent: 'space-between' 
+      }}>
+        {(open || isMobile) ? (
+            <>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <Avatar sx={{ width: 40, height: 40, bgcolor: 'primary.main', fontWeight: 600 }}>
+                  {name.charAt(0).toUpperCase()}
+                </Avatar>
+                <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                  <Typography variant="subtitle2" fontWeight={600} noWrap>{name}</Typography>
+                  <Typography variant="caption" color="text.secondary" noWrap>{email}</Typography>
+                </Box>
+              </Box>
+              {!isMobile && (
+                <IconButton onClick={() => setOpen(false)} size="small">
+                  <ChevronLeft />
+                </IconButton>
+              )}
+            </>
+          ) : (
+            <Avatar sx={{ width: 40, height: 40, bgcolor: 'primary.main', fontWeight: 600, mx: 'auto' }}>
+              {name.charAt(0).toUpperCase()}
+            </Avatar>
           )}
-        </div>
-      );
-    }
+      </Box>
 
-    return (
-      <Link
-        to={item.path}
-        onClick={handleItemClick}
-        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group mb-1
-          ${active 
-            ? 'bg-primary-50 dark:bg-primary-900/20 border-l-4 border-primary-500 text-primary-600 dark:text-primary-400' 
-            : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 border-l-4 border-transparent'
-          }`}
-      >
-        <div className={`min-w-[40px] ${active ? 'text-primary-500' : 'group-hover:text-gray-900 dark:group-hover:text-gray-200'}`}>
-          <Icon size={20} />
-        </div>
-        {(isOpen || isMobileDevice) && (
-          <span className={`text-sm ${active ? 'font-semibold' : 'font-medium'}`}>
-            {item.text}
-          </span>
-        )}
-      </Link>
-    );
-  };
+      <Divider />
 
-  const drawerContent = (isOpen, isMobileDevice) => (
-    <div className="flex flex-col h-full bg-white dark:bg-gray-900">
-      {/* Header */}
-      <div className={`flex items-center p-4 min-h-[72px] border-b border-gray-200 dark:border-gray-800 ${isOpen || isMobileDevice ? 'justify-between' : 'justify-center'}`}>
-        {(isOpen || isMobileDevice) ? (
-          <>
-            <div className="flex items-center gap-3 flex-1 min-w-0">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-r from-primary-500 to-primary-600 flex items-center justify-center text-white font-semibold shadow-md">
-                {name.charAt(0).toUpperCase()}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{name}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{email}</p>
-              </div>
-            </div>
-            {!isMobileDevice && (
-              <button
-                onClick={() => setOpen(false)}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              >
-                <ChevronLeft size={20} className="text-gray-500" />
-              </button>
-            )}
-          </>
-        ) : (
-          <div className="w-10 h-10 rounded-full bg-gradient-to-r from-primary-500 to-primary-600 flex items-center justify-center text-white font-semibold shadow-md">
-            {name.charAt(0).toUpperCase()}
-          </div>
-        )}
-      </div>
-
-      {/* Menu Items */}
-      <div className="flex-1 px-3 py-4 overflow-y-auto sidebar-scroll">
+      <List sx={{ px: 0.5, py: 1 }}>
         {menuItems.map((item) => (
-          <MenuItem key={item.text} item={item} isOpen={isOpen} isMobileDevice={isMobileDevice} />
+          <React.Fragment key={item.text}>
+            {item.submenu ? (
+              <>
+                <StyledListItemButton 
+                  onClick={() => setPaymentsOpen(!paymentsOpen)}
+                  active={item.submenu.some(sub => location.pathname.includes(sub.path)) ? 1 : 0}
+                >
+                  <ListItemIcon sx={{ minWidth: 40, color: 'text.primary' }}>{item.icon}</ListItemIcon>
+                  {(open || isMobile) && (
+                    <>
+                      <ListItemText primary={item.text} primaryTypographyProps={{ fontSize: '0.9rem', fontWeight: 500 }} />
+                      {paymentsOpen ? <ExpandLess /> : <ExpandMore />}
+                    </>
+                  )}
+                </StyledListItemButton>
+                <Collapse in={paymentsOpen} timeout="auto" unmountOnExit>
+                  <List component="div" disablePadding>
+                    {item.submenu.map((subItem) => (
+                      <NestedListItemButton 
+                        key={subItem.text} 
+                        component={Link} 
+                        to={subItem.path} 
+                        onClick={handleItemClick}
+                        selected={isActive(subItem.path)}
+                        sx={{ 
+                           bgcolor: isActive(subItem.path) ? alpha(theme.palette.primary.main, 0.1) : 'transparent',
+                           color: isActive(subItem.path) ? 'primary.main' : 'text.primary',
+                           '& .MuiListItemIcon-root': { color: isActive(subItem.path) ? 'primary.main' : 'inherit' }
+                        }}
+                      >
+                         <ListItemIcon sx={{ minWidth: 30 }}><Circle sx={{ fontSize: 6 }} /></ListItemIcon>
+                         <ListItemText primary={subItem.text} primaryTypographyProps={{ fontSize: '0.85rem' }} />
+                      </NestedListItemButton>
+                    ))}
+                  </List>
+                </Collapse>
+              </>
+            ) : (
+              <Tooltip title={(!open && !isMobile) ? item.text : ''} placement="right" arrow>
+                <StyledListItemButton component={Link} to={item.path} active={isActive(item.path) ? 1 : 0} onClick={handleItemClick}>
+                  <ListItemIcon sx={{ minWidth: 40, color: isActive(item.path) ? 'primary.main' : 'text.primary' }}>
+                    {item.badge && item.badge > 0 ? (
+                      <Badge badgeContent={item.badge} color="error">{item.icon}</Badge>
+                    ) : ( item.icon )}
+                  </ListItemIcon>
+                  {(open || isMobile) && (
+                    <ListItemText primary={item.text} primaryTypographyProps={{ fontSize: '0.9rem', fontWeight: isActive(item.path) ? 600 : 500, color: isActive(item.path) ? 'primary.main' : 'text.primary' }} />
+                  )}
+                </StyledListItemButton>
+              </Tooltip>
+            )}
+          </React.Fragment>
         ))}
-      </div>
-
-      {/* Footer - Logout */}
-      <div className="p-3 border-t border-gray-200 dark:border-gray-800">
-        <button
-          onClick={handleLogout}
-          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group
-            ${isOpen || isMobileDevice ? '' : 'justify-center'}
-            hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400`}
-        >
-          <div className={`min-w-[40px] ${isOpen || isMobileDevice ? '' : 'mx-auto'}`}>
-            <LogOut size={20} />
-          </div>
-          {(isOpen || isMobileDevice) && (
-            <span className="text-sm font-medium">Logout</span>
-          )}
-        </button>
-      </div>
-    </div>
+      </List>
+      
+      <Divider sx={{ mt: 'auto' }} />
+      
+      <List sx={{ px: 0.5, py: 1 }}>
+         <Tooltip title={(!open && !isMobile) ? 'Logout' : ''} placement="right" arrow>
+            <StyledListItemButton onClick={handleLogout}>
+              <ListItemIcon sx={{ minWidth: 40, color: 'error.main' }}><Logout /></ListItemIcon>
+              {(open || isMobile) && (
+                <ListItemText primary="Logout" primaryTypographyProps={{ fontSize: '0.9rem', fontWeight: 500, color: 'error.main' }} />
+              )}
+            </StyledListItemButton>
+         </Tooltip>
+      </List>
+    </>
   );
 
   return (
     <>
-      {/* Mobile Drawer Overlay */}
-      {open && isMobile && (
-        <>
-          <div 
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 md:hidden transition-opacity duration-300"
-            onClick={() => setOpen(false)}
-          />
-          <div className="fixed left-0 top-0 bottom-0 w-[280px] bg-white dark:bg-gray-900 shadow-2xl z-50 md:hidden animate-slideIn">
-            {drawerContent(true, true)}
-          </div>
-        </>
+       <Drawer
+          variant="temporary"
+          open={open && isMobile}
+          onClose={() => setOpen(false)}
+          ModalProps={{ keepMounted: true }} 
+          sx={{
+            display: { xs: 'block', md: 'none' },
+            '& .MuiDrawer-paper': { boxSizing: 'border-box', width: drawerWidthOpen },
+          }}
+        >
+          {drawerContent}
+        </Drawer>
+
+       <StyledDrawer variant="permanent" open={open}>
+          {drawerContent}
+       </StyledDrawer>
+
+       {(!open && !isMobile) && (
+        <IconButton
+          onClick={() => setOpen(true)}
+          sx={{
+            position: 'fixed', top: 20, left: 20, zIndex: 1300,
+            bgcolor: 'background.paper', boxShadow: 3,
+            display: { xs: 'none', md: 'flex' },
+            '&:hover': { bgcolor: 'background.paper', boxShadow: 6 }
+          }}
+        >
+          <ChevronRight />
+        </IconButton>
       )}
 
-      {/* Desktop Sidebar */}
-      <div className={`hidden md:block fixed left-0 top-0 bottom-0 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 transition-all duration-300 ease-in-out z-30
-        ${open ? 'w-[280px]' : 'w-[70px]'}`}
-      >
-        {drawerContent(open, false)}
-      </div>
-
-      {/* Toggle Button for Desktop (when closed) */}
-      {!open && !isMobile && (
-        <button
-          onClick={() => setOpen(true)}
-          className="fixed top-5 left-5 z-40 p-2.5 bg-white dark:bg-gray-800 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 hidden md:flex items-center justify-center border border-gray-200 dark:border-gray-700 hover:border-primary-300 dark:hover:border-primary-700"
+      {(!open && isMobile) && (
+        <IconButton
+            onClick={() => setOpen(true)}
+            sx={{
+                position: 'fixed', bottom: 20, right: 20, zIndex: 1300,
+                bgcolor: 'primary.main', color: 'white', boxShadow: 3,
+                display: { xs: 'flex', md: 'none' },
+                '&:hover': { bgcolor: 'primary.dark', boxShadow: 6 }
+            }}
         >
-          <ChevronRight size={20} className="text-gray-600 dark:text-gray-400" />
-        </button>
-      )}
-
-      {/* Floating Action Button for Mobile (when closed) */}
-      {!open && isMobile && (
-        <button
-          onClick={() => setOpen(true)}
-          className="fixed bottom-5 right-5 z-40 p-3.5 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200 md:hidden hover:scale-105"
-        >
-          <ChevronRight size={20} />
-        </button>
+            <ChevronRight />
+        </IconButton>
       )}
     </>
   );

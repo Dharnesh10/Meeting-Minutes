@@ -23,19 +23,7 @@ import {
   FormControlLabel,
   Divider,
   InputAdornment,
-  alpha,
-  Container,
-  Stepper,
-  Step,
-  StepLabel,
-  StepContent,
-  useTheme,
-  Fade,
-  Grow,
-  Zoom,
-  LinearProgress,
-  Tooltip,
-  Badge
+  alpha
 } from '@mui/material';
 import {
   AddCircleOutline,
@@ -55,58 +43,18 @@ import {
   FormatListBulleted,
   CheckCircle,
   CallSplit,
-  Info,
-  Dashboard,
-  RocketLaunch,
-  AutoAwesome,
-  EventNote,
-  PeopleAlt,
-  Assignment,
-  Send,
-  ArrowForward,
-  CheckCircleOutline,
-  CancelOutlined,
-  Today,
-  Timer,
-  Videocam,
-  RoomPreferences,
-  Category,
-  PriorityHigh,
-  Notes,
-  Save
+  Info
 } from '@mui/icons-material';
 import { useSearchParams } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
 import API_CONFIG from '../config/api';
-
-// Animation variants
-const fadeInUp = {
-  initial: { opacity: 0, y: 20 },
-  animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -20 },
-  transition: { duration: 0.3 }
-};
-
-const staggerContainer = {
-  animate: {
-    transition: {
-      staggerChildren: 0.1
-    }
-  }
-};
 
 export default function CreateMeeting() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const theme = useTheme();
   const isEditMode = !!id;
   const [searchParams] = useSearchParams();
   const followupMeetingId = searchParams.get('followup');
   const isFollowupMode = !!followupMeetingId;
-
-  // Stepper state
-  const [activeStep, setActiveStep] = useState(0);
-  const steps = ['Meeting Details', 'Date & Venue', 'Attendees', 'Agenda', 'Review'];
 
   const [formData, setFormData] = useState({
     meeting_name: '',
@@ -367,189 +315,142 @@ export default function CreateMeeting() {
     });
   };
 
-  const handleNext = () => {
-    setActiveStep((prevActiveStep) => prevActiveStep + 1);
-  };
+// FIND THIS SECTION IN CreateMeeting.jsx (around line 350-390)
+// REPLACE the handleSubmit function's date/time handling
 
-  const handleBack = () => {
-    setActiveStep((prevActiveStep) => prevActiveStep - 1);
-  };
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setSaving(true);
+  setError('');
+  setSuccess('');
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-    setError('');
-    setSuccess('');
+  if (!token) {
+    window.location.href = '/login';
+    return;
+  }
 
-    if (!token) {
+  if (formData.selectedUsers.length === 0 && formData.selectedDepartments.length === 0) {
+    setError('Please add at least one attendee or select a department');
+    setSaving(false);
+    return;
+  }
+
+  if (venueAvailability && !venueAvailability.available) {
+    setError('Selected venue is not available for this time slot');
+    setSaving(false);
+    return;
+  }
+
+  if (Number(formData.meeting_duration) < 15) {
+    setError('Meeting duration must be at least 15 minutes');
+    setSaving(false);
+    return;
+  }
+
+  try {
+    // ✅ FIX: Create local datetime without timezone conversion
+    const localDateTime = new Date(`${formData.meeting_date}T${formData.meeting_time}:00`);
+    
+    // ✅ FIX: Get date/time components in local timezone
+    const year = localDateTime.getFullYear();
+    const month = String(localDateTime.getMonth() + 1).padStart(2, '0');
+    const day = String(localDateTime.getDate()).padStart(2, '0');
+    const hours = String(localDateTime.getHours()).padStart(2, '0');
+    const minutes = String(localDateTime.getMinutes()).padStart(2, '0');
+    
+    // ✅ FIX: Send as separate date and time strings (no timezone conversion)
+    const meeting_date = `${year}-${month}-${day}`;
+    const meeting_time = `${hours}:${minutes}`;
+
+    console.log('📅 Creating meeting:');
+    console.log('   Input date:', formData.meeting_date);
+    console.log('   Input time:', formData.meeting_time);
+    console.log('   Sending date:', meeting_date);
+    console.log('   Sending time:', meeting_time);
+
+    const payload = {
+      meeting_name: formData.meeting_name,
+      meeting_description: formData.meeting_description,
+      meeting_date: meeting_date,  // ✅ Use fixed date
+      meeting_time: meeting_time,  // ✅ Use fixed time
+      meeting_duration: formData.meeting_duration,
+      venue: formData.venue,
+      meetingType: formData.meetingType,
+      priority: formData.priority,
+      attendees: formData.selectedUsers.map(u => u._id || u.id).filter(Boolean),
+      departments: formData.selectedDepartments,
+      agenda: formData.agenda.filter(a => a.title),
+      isFollowup: isFollowupMode,
+      parentMeetingId: followupMeetingId || null
+    };
+
+    const url = isEditMode 
+      ? `${API_CONFIG.baseURL}/meetings/${id}`
+      : `${API_CONFIG.baseURL}/meetings`;
+
+    const method = isEditMode ? 'PUT' : 'POST';
+
+    const res = await fetch(url, {
+      method: method,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+
+    if (res.status === 401) {
+      localStorage.clear();
       window.location.href = '/login';
       return;
     }
 
-    if (formData.selectedUsers.length === 0 && formData.selectedDepartments.length === 0) {
-      setError('Please add at least one attendee or select a department');
-      setSaving(false);
-      return;
+    if (!res.ok) {
+      throw new Error(data.message || 'Failed to save meeting');
     }
 
-    if (venueAvailability && !venueAvailability.available) {
-      setError('Selected venue is not available for this time slot');
-      setSaving(false);
-      return;
-    }
-
-    if (Number(formData.meeting_duration) < 15) {
-      setError('Meeting duration must be at least 15 minutes');
-      setSaving(false);
-      return;
-    }
-
-    try {
-      // Create local datetime without timezone conversion
-      const localDateTime = new Date(`${formData.meeting_date}T${formData.meeting_time}:00`);
-      
-      const year = localDateTime.getFullYear();
-      const month = String(localDateTime.getMonth() + 1).padStart(2, '0');
-      const day = String(localDateTime.getDate()).padStart(2, '0');
-      const hours = String(localDateTime.getHours()).padStart(2, '0');
-      const minutes = String(localDateTime.getMinutes()).padStart(2, '0');
-      
-      const meeting_date = `${year}-${month}-${day}`;
-      const meeting_time = `${hours}:${minutes}`;
-
-      const payload = {
-        meeting_name: formData.meeting_name,
-        meeting_description: formData.meeting_description,
-        meeting_date: meeting_date,
-        meeting_time: meeting_time,
-        meeting_duration: formData.meeting_duration,
-        venue: formData.venue,
-        meetingType: formData.meetingType,
-        priority: formData.priority,
-        attendees: formData.selectedUsers.map(u => u._id || u.id).filter(Boolean),
-        departments: formData.selectedDepartments,
-        agenda: formData.agenda.filter(a => a.title),
-        isFollowup: isFollowupMode,
-        parentMeetingId: followupMeetingId || null
-      };
-
-      const url = isEditMode 
-        ? `${API_CONFIG.baseURL}/meetings/${id}`
-        : `${API_CONFIG.baseURL}/meetings`;
-
-      const method = isEditMode ? 'PUT' : 'POST';
-
-      const res = await fetch(url, {
-        method: method,
+    if (isEditMode) {
+      setSuccess('Meeting updated successfully');
+    } else if (isFollowupMode) {
+      await fetch(`${API_CONFIG.baseURL}/minutes/${followupMeetingId}/end`, {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(payload)
+        }
       });
-
-      const data = await res.json();
-
-      if (res.status === 401) {
-        localStorage.clear();
-        window.location.href = '/login';
-        return;
-      }
-
-      if (!res.ok) {
-        throw new Error(data.message || 'Failed to save meeting');
-      }
-
-      if (isEditMode) {
-        setSuccess('Meeting updated successfully');
-      } else if (isFollowupMode) {
-        await fetch(`${API_CONFIG.baseURL}/minutes/${followupMeetingId}/end`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          }
-        });
-        
-        setSuccess('Follow-up meeting created successfully');
+      
+      setSuccess('Follow-up meeting created successfully');
+    } else {
+      if (data.requiresApproval) {
+        setSuccess(`Meeting created - ID: ${data.meeting.meetingid}. Sent for approval.`);
       } else {
-        if (data.requiresApproval) {
-          setSuccess(`Meeting created - ID: ${data.meeting.meetingid}. Sent for approval.`);
-        } else {
-          setSuccess(`Meeting created and approved - ID: ${data.meeting.meetingid}`);
-        }
+        setSuccess(`Meeting created and approved - ID: ${data.meeting.meetingid}`);
       }
-
-      setTimeout(() => {
-        if (isEditMode) {
-          navigate(`/meeting-details?id=${id}`);
-          window.location.reload();
-        } else {
-          navigate('/');
-        }
-      }, 1500);
-
-    } catch (err) {
-      setError(err.message || 'Failed to save meeting');
-      setSaving(false);
     }
-  };
 
-  // Helper function to check if current step is valid
-  const isStepValid = () => {
-    switch (activeStep) {
-      case 0:
-        return formData.meeting_name.trim() !== '' && formData.meeting_description.trim() !== '';
-      case 1:
-        return formData.meeting_date !== '' && formData.meeting_time !== '' && formData.meeting_duration >= 15 && formData.venue !== '';
-      case 2:
-        return formData.selectedUsers.length > 0 || formData.selectedDepartments.length > 0;
-      default:
-        return true;
-    }
-  };
+    setTimeout(() => {
+      if (isEditMode) {
+        navigate(`/meeting-details?id=${id}`);
+        window.location.reload();
+      } else {
+        navigate('/');
+      }
+    }, 1500);
 
-  const getPriorityColor = (priority) => {
-    switch(priority) {
-      case 'urgent': return '#f44336';
-      case 'high': return '#ff9800';
-      case 'medium': return '#2196f3';
-      default: return '#4caf50';
-    }
-  };
-
-  const getPriorityIcon = (priority) => {
-    switch(priority) {
-      case 'urgent': return <PriorityHigh sx={{ fontSize: 16 }} />;
-      case 'high': return <PriorityHigh sx={{ fontSize: 16 }} />;
-      default: return <Category sx={{ fontSize: 16 }} />;
-    }
-  };
-
-  const getMeetingTypeIcon = (type) => {
-    switch(type) {
-      case 'internal': return <PeopleAlt sx={{ fontSize: 16 }} />;
-      case 'departmental': return <Business sx={{ fontSize: 16 }} />;
-      case 'external': return <Videocam sx={{ fontSize: 16 }} />;
-      default: return <Group sx={{ fontSize: 16 }} />;
-    }
-  };
+  } catch (err) {
+    setError(err.message || 'Failed to save meeting');
+    setSaving(false);
+  }
+};
 
   if (loading) {
     return (
-      <Box sx={{ 
-        minHeight: '100vh', 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center',
-        background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.05)} 0%, ${alpha(theme.palette.secondary.main, 0.05)} 100%)`
-      }}>
-        <Fade in>
-          <Stack spacing={3} alignItems="center">
-            <CircularProgress size={60} thickness={4} />
-            <Typography variant="h6" color="text.secondary">Loading meeting details...</Typography>
-          </Stack>
-        </Fade>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
+        <CircularProgress />
+        <Typography sx={{ ml: 2 }}>Loading meeting data...</Typography>
       </Box>
     );
   }
@@ -557,687 +458,473 @@ export default function CreateMeeting() {
   return (
     <Box sx={{ 
       minHeight: '100vh', 
-      background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.03)} 0%, ${alpha(theme.palette.secondary.main, 0.03)} 100%)`,
-      py: { xs: 2, md: 5 },
-      px: { xs: 1, md: 2 }
+      bgcolor: alpha('#667eea', 0.02),
+      py: 4
     }}>
-      <Container maxWidth="lg">
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          {/* Header Section */}
-          <Box sx={{ mb: 5, textAlign: 'center' }}>
-            <Chip 
-              label={isEditMode ? 'Edit Mode' : isFollowupMode ? 'Follow-up Mode' : 'New Meeting'}
-              color={isEditMode ? 'warning' : isFollowupMode ? 'info' : 'primary'}
-              sx={{ mb: 2, fontWeight: 600, px: 1 }}
-              icon={isEditMode ? <Edit /> : isFollowupMode ? <CallSplit /> : <AutoAwesome />}
-            />
-            <Typography 
-              variant="h3" 
-              fontWeight="800" 
-              sx={{ 
-                background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
-                backgroundClip: 'text',
-                WebkitBackgroundClip: 'text',
-                color: 'transparent',
-                mb: 1
-              }}
-            >
+      <Box sx={{ maxWidth: 900, mx: 'auto', px: 3 }}>
+        {/* Header */}
+        <Box sx={{ mb: 4 }}>
+          <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1 }}>
+            {isEditMode ? <Edit sx={{ fontSize: 32, color: 'primary.main' }} /> : 
+             isFollowupMode ? <CallSplit sx={{ fontSize: 32, color: 'primary.main' }} /> :
+             <AddCircleOutline sx={{ fontSize: 32, color: 'primary.main' }} />}
+            <Typography variant="h4" fontWeight="700">
               {isEditMode ? 'Edit Meeting' : isFollowupMode ? 'Create Follow-up Meeting' : 'Schedule New Meeting'}
             </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 600, mx: 'auto' }}>
-              {isEditMode ? 'Update the meeting details below' : 
-               isFollowupMode ? 'Data copied from parent meeting. Adjust as needed.' :
-               'Enter the required information below. You can change it anytime.'}
-            </Typography>
-          </Box>
+          </Stack>
+          <Typography variant="body2" color="text.secondary">
+            {isEditMode ? 'Update the meeting details below' : 
+             isFollowupMode ? 'Data copied from parent meeting. Adjust as needed.' :
+             'Enter the required information below. You can change it anytime.'}
+          </Typography>
+        </Box>
 
-          {/* Alerts */}
-          <AnimatePresence>
-            {error && (
-              <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-                <Alert 
-                  severity="error" 
-                  sx={{ mb: 3, borderRadius: 2 }}
-                  action={
-                    <IconButton color="inherit" size="small" onClick={() => setError('')}>
-                      <Close fontSize="inherit" />
-                    </IconButton>
-                  }
-                >
-                  {error}
-                </Alert>
-              </motion.div>
-            )}
-            {success && (
-              <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-                <Alert 
-                  severity="success" 
-                  sx={{ mb: 3, borderRadius: 2 }}
-                  icon={<CheckCircleOutline />}
-                  action={
-                    <IconButton color="inherit" size="small" onClick={() => setSuccess('')}>
-                      <Close fontSize="inherit" />
-                    </IconButton>
-                  }
-                >
-                  {success}
-                </Alert>
-              </motion.div>
-            )}
-            {isFollowupMode && (
-              <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
-                <Alert 
-                  severity="info" 
-                  sx={{ mb: 3, borderRadius: 2 }} 
-                  icon={<Info />}
-                >
-                  Creating follow-up meeting from parent meeting. All data has been pre-filled.
-                </Alert>
-              </motion.div>
-            )}
-          </AnimatePresence>
+        {error && (
+          <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>
+            {error}
+          </Alert>
+        )}
 
-          {/* Stepper Form */}
-          <Paper 
-            elevation={0} 
-            sx={{ 
-              borderRadius: 4,
-              background: 'rgba(255,255,255,0.9)',
-              backdropFilter: 'blur(10px)',
-              border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
-              overflow: 'hidden'
-            }}
-          >
-            <Stepper activeStep={activeStep} orientation="vertical" sx={{ p: 3 }}>
-              {steps.map((label, index) => (
-                <Step key={label}>
-                  <StepLabel 
-                    StepIconComponent={(props) => (
-                      <Zoom in>
-                        <Box
-                          sx={{
-                            width: 32,
-                            height: 32,
-                            borderRadius: '50%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            background: props.active ? `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})` : 
-                                       props.completed ? theme.palette.success.main : 
-                                       alpha(theme.palette.grey[500], 0.2),
-                            color: props.active || props.completed ? 'white' : theme.palette.text.secondary,
-                            transition: 'all 0.3s'
-                          }}
-                        >
-                          {props.completed ? <CheckCircle sx={{ fontSize: 18 }} /> : index + 1}
-                        </Box>
-                      </Zoom>
-                    )}
+        {success && (
+          <Alert severity="success" sx={{ mb: 3 }} onClose={() => setSuccess('')}>
+            {success}
+          </Alert>
+        )}
+
+        {isFollowupMode && (
+          <Alert severity="info" sx={{ mb: 3 }} icon={<Info />}>
+            Creating follow-up meeting from parent meeting
+          </Alert>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          <Stack spacing={4}>
+            {/* Meeting Name */}
+            <Card>
+              <Box sx={{ p: 3 }}>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  Meeting name
+                </Typography>
+                <TextField
+                  name="meeting_name"
+                  value={formData.meeting_name}
+                  onChange={handleChange}
+                  required
+                  fullWidth
+                  placeholder="e.g., Department Review Meeting"
+                  variant="outlined"
+                />
+              </Box>
+            </Card>
+
+            {/* Description */}
+            <Card>
+              <Box sx={{ p: 3 }}>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  Description
+                </Typography>
+                <TextField
+                  name="meeting_description"
+                  value={formData.meeting_description}
+                  onChange={handleChange}
+                  multiline
+                  rows={3}
+                  fullWidth
+                  placeholder="Brief description of the meeting purpose"
+                  variant="outlined"
+                />
+              </Box>
+            </Card>
+
+            {/* Date & Time */}
+            <Card>
+              <Box sx={{ p: 3 }}>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom sx={{ mb: 2 }}>
+                  Date and time
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={4}>
+                    <TextField
+                      name="meeting_date"
+                      type="date"
+                      value={formData.meeting_date}
+                      onChange={handleChange}
+                      required
+                      fullWidth
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <CalendarMonth />
+                          </InputAdornment>
+                        ),
+                      }}
+                      InputLabelProps={{ shrink: true }}
+                      inputProps={{ min: new Date().toISOString().split('T')[0] }}
+                    />
+                  </Grid>
+
+                  <Grid item xs={12} sm={4}>
+                    <TextField
+                      name="meeting_time"
+                      type="time"
+                      value={formData.meeting_time}
+                      onChange={handleChange}
+                      required
+                      fullWidth
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <AccessTime />
+                          </InputAdornment>
+                        ),
+                      }}
+                      InputLabelProps={{ shrink: true }}
+                    />
+                  </Grid>
+
+                  <Grid item xs={12} sm={4}>
+                    <TextField
+                      name="meeting_duration"
+                      type="number"
+                      value={formData.meeting_duration}
+                      onChange={handleChange}
+                      required
+                      fullWidth
+                      placeholder="Duration (minutes)"
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <Schedule />
+                          </InputAdornment>
+                        ),
+                      }}
+                      inputProps={{ min: 15, step: 15 }}
+                    />
+                  </Grid>
+                </Grid>
+              </Box>
+            </Card>
+
+            {/* Venue */}
+            <Card>
+              <Box sx={{ p: 3 }}>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  Select venue
+                </Typography>
+                <FormControl fullWidth required>
+                  <Select
+                    name="venue"
+                    value={formData.venue}
+                    onChange={handleChange}
+                    displayEmpty
+                    startAdornment={
+                      <InputAdornment position="start">
+                        <LocationOn />
+                      </InputAdornment>
+                    }
                   >
-                    <Typography variant="subtitle1" fontWeight={activeStep === index ? 700 : 500}>
-                      {label}
+                    <MenuItem value="" disabled>
+                      Choose a venue
+                    </MenuItem>
+                    {venues.map(v => (
+                      <MenuItem key={v._id} value={v._id}>
+                        {v.name} ({v.code}) - Capacity: {v.capacity}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
+                {venueAvailability && (
+                  <Alert 
+                    severity={venueAvailability.available ? 'success' : 'error'}
+                    icon={venueAvailability.available ? <CheckCircle /> : <Info />}
+                    sx={{ mt: 2 }}
+                  >
+                    {venueAvailability.available ? (
+                      'Venue is available for the selected time slot'
+                    ) : (
+                      <>
+                        Venue is booked during this time
+                        {venueAvailability.conflicts?.map((c, i) => (
+                          <Box key={i} sx={{ mt: 1, fontSize: '0.875rem' }}>
+                            {c.meeting_name} by {c.host}
+                          </Box>
+                        ))}
+                      </>
+                    )}
+                  </Alert>
+                )}
+              </Box>
+            </Card>
+
+            {/* Meeting Type & Priority */}
+            <Card>
+              <Box sx={{ p: 3 }}>
+                <Grid container spacing={3}>
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      Meeting type
                     </Typography>
-                  </StepLabel>
-                  <StepContent>
-                    <motion.div
-                      key={activeStep}
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -20 }}
-                      transition={{ duration: 0.3 }}
+                    <FormControl fullWidth required>
+                      <Select
+                        name="meetingType"
+                        value={formData.meetingType}
+                        onChange={handleChange}
+                        displayEmpty
+                      >
+                        <MenuItem value="internal">Internal</MenuItem>
+                        <MenuItem value="departmental">Departmental</MenuItem>
+                        <MenuItem value="inter-departmental">Inter-Departmental</MenuItem>
+                        <MenuItem value="external">External</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      Priority level
+                    </Typography>
+                    <RadioGroup
+                      row
+                      name="priority"
+                      value={formData.priority}
+                      onChange={handleChange}
                     >
-                      <Box sx={{ py: 2, maxWidth: '100%' }}>
-                        {/* Step 0: Meeting Details */}
-                        {activeStep === 0 && (
-                          <Grid container spacing={3}>
-                            <Grid item xs={12}>
-                              <TextField
-                                name="meeting_name"
-                                label="Meeting Name"
-                                value={formData.meeting_name}
-                                onChange={handleChange}
-                                required
-                                fullWidth
-                                placeholder="e.g., Department Review Meeting"
-                                variant="outlined"
-                                InputProps={{
-                                  startAdornment: (
-                                    <InputAdornment position="start">
-                                      <EventNote color="primary" />
-                                    </InputAdornment>
-                                  ),
-                                }}
-                              />
-                            </Grid>
-                            <Grid item xs={12}>
-                              <TextField
-                                name="meeting_description"
-                                label="Description"
-                                value={formData.meeting_description}
-                                onChange={handleChange}
-                                multiline
-                                rows={4}
-                                fullWidth
-                                placeholder="Brief description of the meeting purpose"
-                                variant="outlined"
-                                InputProps={{
-                                  startAdornment: (
-                                    <InputAdornment position="start">
-                                      <Notes color="primary" />
-                                    </InputAdornment>
-                                  ),
-                                }}
-                              />
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                              <FormControl fullWidth required>
-                                <InputLabel>Meeting Type</InputLabel>
-                                <Select
-                                  name="meetingType"
-                                  value={formData.meetingType}
-                                  onChange={handleChange}
-                                  label="Meeting Type"
-                                  startAdornment={
-                                    <InputAdornment position="start">
-                                      {getMeetingTypeIcon(formData.meetingType)}
-                                    </InputAdornment>
-                                  }
-                                >
-                                  <MenuItem value="internal">Internal</MenuItem>
-                                  <MenuItem value="departmental">Departmental</MenuItem>
-                                  <MenuItem value="inter-departmental">Inter-Departmental</MenuItem>
-                                  <MenuItem value="external">External</MenuItem>
-                                </Select>
-                              </FormControl>
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                                Priority Level
-                              </Typography>
-                              <RadioGroup
-                                row
-                                name="priority"
-                                value={formData.priority}
-                                onChange={handleChange}
-                              >
-                                <FormControlLabel 
-                                  value="low" 
-                                  control={<Radio />} 
-                                  label={<Chip label="Low" size="small" sx={{ bgcolor: alpha('#4caf50', 0.1), color: '#4caf50' }} />}
-                                />
-                                <FormControlLabel 
-                                  value="medium" 
-                                  control={<Radio />} 
-                                  label={<Chip label="Medium" size="small" sx={{ bgcolor: alpha('#2196f3', 0.1), color: '#2196f3' }} />}
-                                />
-                                <FormControlLabel 
-                                  value="high" 
-                                  control={<Radio />} 
-                                  label={<Chip label="High" size="small" sx={{ bgcolor: alpha('#ff9800', 0.1), color: '#ff9800' }} />}
-                                />
-                                <FormControlLabel 
-                                  value="urgent" 
-                                  control={<Radio />} 
-                                  label={<Chip label="Urgent" size="small" sx={{ bgcolor: alpha('#f44336', 0.1), color: '#f44336' }} />}
-                                />
-                              </RadioGroup>
-                            </Grid>
-                          </Grid>
-                        )}
+                      <FormControlLabel 
+                        value="low" 
+                        control={<Radio />} 
+                        label={<Chip label="Low" size="small" />}
+                      />
+                      <FormControlLabel 
+                        value="medium" 
+                        control={<Radio />} 
+                        label={<Chip label="Medium" size="small" color="info" />}
+                      />
+                      <FormControlLabel 
+                        value="high" 
+                        control={<Radio />} 
+                        label={<Chip label="High" size="small" color="warning" />}
+                      />
+                      <FormControlLabel 
+                        value="urgent" 
+                        control={<Radio />} 
+                        label={<Chip label="Urgent" size="small" color="error" />}
+                      />
+                    </RadioGroup>
+                  </Grid>
+                </Grid>
+              </Box>
+            </Card>
 
-                        {/* Step 1: Date & Venue */}
-                        {activeStep === 1 && (
-                          <Grid container spacing={3}>
-                            <Grid item xs={12} sm={6}>
-                              <TextField
-                                name="meeting_date"
-                                label="Meeting Date"
-                                type="date"
-                                value={formData.meeting_date}
-                                onChange={handleChange}
-                                required
-                                fullWidth
-                                InputLabelProps={{ shrink: true }}
-                                InputProps={{
-                                  startAdornment: (
-                                    <InputAdornment position="start">
-                                      <Today color="primary" />
-                                    </InputAdornment>
-                                  ),
-                                }}
-                                inputProps={{ min: new Date().toISOString().split('T')[0] }}
-                              />
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                              <TextField
-                                name="meeting_time"
-                                label="Meeting Time"
-                                type="time"
-                                value={formData.meeting_time}
-                                onChange={handleChange}
-                                required
-                                fullWidth
-                                InputLabelProps={{ shrink: true }}
-                                InputProps={{
-                                  startAdornment: (
-                                    <InputAdornment position="start">
-                                      <AccessTime color="primary" />
-                                    </InputAdornment>
-                                  ),
-                                }}
-                              />
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                              <TextField
-                                name="meeting_duration"
-                                label="Duration (minutes)"
-                                type="number"
-                                value={formData.meeting_duration}
-                                onChange={handleChange}
-                                required
-                                fullWidth
-                                InputProps={{
-                                  startAdornment: (
-                                    <InputAdornment position="start">
-                                      <Timer color="primary" />
-                                    </InputAdornment>
-                                  ),
-                                  inputProps: { min: 15, step: 15 }
-                                }}
-                              />
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                              <FormControl fullWidth required>
-                                <InputLabel>Select Venue</InputLabel>
-                                <Select
-                                  name="venue"
-                                  value={formData.venue}
-                                  onChange={handleChange}
-                                  label="Select Venue"
-                                  startAdornment={
-                                    <InputAdornment position="start">
-                                      <RoomPreferences color="primary" />
-                                    </InputAdornment>
-                                  }
-                                >
-                                  {venues.map(v => (
-                                    <MenuItem key={v._id} value={v._id}>
-                                      <Box>
-                                        <Typography variant="body2">{v.name} ({v.code})</Typography>
-                                        <Typography variant="caption" color="text.secondary">Capacity: {v.capacity}</Typography>
-                                      </Box>
-                                    </MenuItem>
-                                  ))}
-                                </Select>
-                              </FormControl>
-                            </Grid>
-                            {venueAvailability && (
-                              <Grid item xs={12}>
-                                <Alert 
-                                  severity={venueAvailability.available ? 'success' : 'error'}
-                                  icon={venueAvailability.available ? <CheckCircle /> : <Info />}
-                                  sx={{ borderRadius: 2 }}
-                                >
-                                  {venueAvailability.available ? (
-                                    'Venue is available for the selected time slot ✓'
-                                  ) : (
-                                    <>
-                                      <strong>Venue is booked during this time</strong>
-                                      {venueAvailability.conflicts?.map((c, i) => (
-                                        <Box key={i} sx={{ mt: 1, fontSize: '0.875rem' }}>
-                                          • {c.meeting_name} by {c.host}
-                                        </Box>
-                                      ))}
-                                    </>
-                                  )}
-                                </Alert>
-                              </Grid>
-                            )}
-                          </Grid>
-                        )}
+            {/* Attendees */}
+            <Card>
+              <Box sx={{ p: 3 }}>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  Add attendees
+                </Typography>
+                <Typography variant="caption" color="error" gutterBottom display="block" sx={{ mb: 2 }}>
+                  At least one attendee or department is required
+                </Typography>
 
-                        {/* Step 2: Attendees */}
-                        {activeStep === 2 && (
-                          <Stack spacing={3}>
-                            <Box>
-                              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                                Search for users
-                              </Typography>
-                              <TextField
-                                fullWidth
-                                placeholder="Search by name, email, or faculty ID..."
-                                value={userSearch}
-                                onChange={(e) => setUserSearch(e.target.value)}
-                                InputProps={{
-                                  startAdornment: (
-                                    <InputAdornment position="start">
-                                      <Search color="primary" />
-                                    </InputAdornment>
-                                  ),
-                                }}
-                              />
-                              <AnimatePresence>
-                                {searchResults.length > 0 && (
-                                  <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-                                    <Paper variant="outlined" sx={{ mt: 2, maxHeight: 300, overflow: 'auto', borderRadius: 2 }}>
-                                      {searchResults.map(user => (
-                                        <Box
-                                          key={user._id}
-                                          sx={{ 
-                                            p: 2, 
-                                            cursor: 'pointer',
-                                            '&:hover': { bgcolor: 'action.hover' },
-                                            borderBottom: '1px solid',
-                                            borderColor: 'divider',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 2
-                                          }}
-                                          onClick={() => addUserToMeeting(user)}
-                                        >
-                                          <Avatar sx={{ width: 40, height: 40, bgcolor: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})` }}>
-                                            {user.firstName?.[0]}
-                                          </Avatar>
-                                          <Box>
-                                            <Typography variant="body2" fontWeight="500">
-                                              {user.firstName} {user.lastName}
-                                            </Typography>
-                                            <Typography variant="caption" color="text.secondary">
-                                              {user.facultyId} • {user.department?.name}
-                                            </Typography>
-                                          </Box>
-                                          <Button size="small" variant="outlined" sx={{ ml: 'auto' }}>Add</Button>
-                                        </Box>
-                                      ))}
-                                    </Paper>
-                                  </motion.div>
-                                )}
-                              </AnimatePresence>
-                            </Box>
-
-                            {formData.selectedUsers.length > 0 && (
-                              <Box>
-                                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                                  Selected Users ({formData.selectedUsers.length})
-                                </Typography>
-                                <Stack direction="row" flexWrap="wrap" gap={1}>
-                                  {formData.selectedUsers.map(user => (
-                                    <Chip
-                                      key={user._id}
-                                      avatar={<Avatar sx={{ width: 24, height: 24 }}>{user.firstName?.[0]}</Avatar>}
-                                      label={`${user.firstName} ${user.lastName}`}
-                                      onDelete={() => removeUser(user._id)}
-                                      variant="outlined"
-                                      sx={{ borderRadius: 2 }}
-                                    />
-                                  ))}
-                                </Stack>
-                              </Box>
-                            )}
-
-                            <Divider sx={{ my: 1 }} />
-
-                            <Box>
-                              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                                Add entire departments
-                              </Typography>
-                              <FormControl fullWidth>
-                                <InputLabel>Select Departments</InputLabel>
-                                <Select
-                                  multiple
-                                  value={formData.selectedDepartments}
-                                  onChange={(e) => setFormData({ ...formData, selectedDepartments: e.target.value })}
-                                  label="Select Departments"
-                                  renderValue={(selected) => (
-                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                                      {selected.map((value) => {
-                                        const dept = departments.find(d => d._id === value);
-                                        return <Chip key={value} label={dept?.name} size="small" />;
-                                      })}
-                                    </Box>
-                                  )}
-                                >
-                                  {departments.map(dept => (
-                                    <MenuItem key={dept._id} value={dept._id}>
-                                      <Typography variant="body2">{dept.name}</Typography>
-                                      <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>({dept.code})</Typography>
-                                    </MenuItem>
-                                  ))}
-                                </Select>
-                              </FormControl>
-                            </Box>
-                          </Stack>
-                        )}
-
-                        {/* Step 3: Agenda */}
-                        {activeStep === 3 && (
-                          <Stack spacing={2}>
-                            <Button
-                              startIcon={<Add />}
-                              onClick={addAgendaItem}
-                              variant="outlined"
-                              sx={{ alignSelf: 'flex-start', borderRadius: 2 }}
-                            >
-                              Add Agenda Item
-                            </Button>
-                            <AnimatePresence>
-                              {formData.agenda.map((item, index) => (
-                                <motion.div
-                                  key={index}
-                                  initial={{ opacity: 0, x: -20 }}
-                                  animate={{ opacity: 1, x: 0 }}
-                                  exit={{ opacity: 0, x: 20 }}
-                                  transition={{ duration: 0.2 }}
-                                >
-                                  <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-                                    <Grid container spacing={2} alignItems="center">
-                                      <Grid item xs={12} sm={5}>
-                                        <TextField
-                                          placeholder="Agenda title"
-                                          value={item.title}
-                                          onChange={(e) => updateAgendaItem(index, 'title', e.target.value)}
-                                          fullWidth
-                                          size="small"
-                                          InputProps={{
-                                            startAdornment: (
-                                              <InputAdornment position="start">
-                                                <FormatListBulleted sx={{ fontSize: 18 }} />
-                                              </InputAdornment>
-                                            ),
-                                          }}
-                                        />
-                                      </Grid>
-                                      <Grid item xs={12} sm={5}>
-                                        <TextField
-                                          placeholder="Description"
-                                          value={item.description}
-                                          onChange={(e) => updateAgendaItem(index, 'description', e.target.value)}
-                                          fullWidth
-                                          size="small"
-                                        />
-                                      </Grid>
-                                      <Grid item xs={10} sm={1}>
-                                        <TextField
-                                          placeholder="Min"
-                                          type="number"
-                                          value={item.duration}
-                                          onChange={(e) => updateAgendaItem(index, 'duration', parseInt(e.target.value))}
-                                          fullWidth
-                                          size="small"
-                                          inputProps={{ min: 5 }}
-                                        />
-                                      </Grid>
-                                      <Grid item xs={2} sm={1}>
-                                        <IconButton color="error" onClick={() => removeAgendaItem(index)} size="small">
-                                          <Delete />
-                                        </IconButton>
-                                      </Grid>
-                                    </Grid>
-                                  </Paper>
-                                </motion.div>
-                              ))}
-                            </AnimatePresence>
-                            {formData.agenda.length === 0 && (
-                              <Typography variant="body2" color="text.secondary" textAlign="center" sx={{ py: 4 }}>
-                                No agenda items added. Click "Add Agenda Item" to start.
-                              </Typography>
-                            )}
-                          </Stack>
-                        )}
-
-                        {/* Step 4: Review */}
-                        {activeStep === 4 && (
-                          <Stack spacing={3}>
-                            <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, bgcolor: alpha(theme.palette.primary.main, 0.02) }}>
-                              <Typography variant="h6" fontWeight="600" gutterBottom>
-                                Meeting Summary
-                              </Typography>
-                              <Divider sx={{ mb: 2 }} />
-                              <Grid container spacing={2}>
-                                <Grid item xs={12} sm={6}>
-                                  <Typography variant="caption" color="text.secondary">Meeting Name</Typography>
-                                  <Typography variant="body1" fontWeight="500">{formData.meeting_name || 'Not specified'}</Typography>
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                  <Typography variant="caption" color="text.secondary">Description</Typography>
-                                  <Typography variant="body2">{formData.meeting_description || 'No description'}</Typography>
-                                </Grid>
-                                <Grid item xs={6} sm={3}>
-                                  <Typography variant="caption" color="text.secondary">Date</Typography>
-                                  <Typography variant="body2">{formData.meeting_date || 'Not set'}</Typography>
-                                </Grid>
-                                <Grid item xs={6} sm={3}>
-                                  <Typography variant="caption" color="text.secondary">Time</Typography>
-                                  <Typography variant="body2">{formData.meeting_time || 'Not set'}</Typography>
-                                </Grid>
-                                <Grid item xs={6} sm={3}>
-                                  <Typography variant="caption" color="text.secondary">Duration</Typography>
-                                  <Typography variant="body2">{formData.meeting_duration} minutes</Typography>
-                                </Grid>
-                                <Grid item xs={6} sm={3}>
-                                  <Typography variant="caption" color="text.secondary">Venue</Typography>
-                                  <Typography variant="body2">{venues.find(v => v._id === formData.venue)?.name || 'Not selected'}</Typography>
-                                </Grid>
-                                <Grid item xs={6} sm={3}>
-                                  <Typography variant="caption" color="text.secondary">Meeting Type</Typography>
-                                  <Chip 
-                                    label={formData.meetingType} 
-                                    size="small" 
-                                    icon={getMeetingTypeIcon(formData.meetingType)}
-                                    sx={{ mt: 0.5 }}
-                                  />
-                                </Grid>
-                                <Grid item xs={6} sm={3}>
-                                  <Typography variant="caption" color="text.secondary">Priority</Typography>
-                                  <Chip 
-                                    label={formData.priority} 
-                                    size="small" 
-                                    sx={{ bgcolor: alpha(getPriorityColor(formData.priority), 0.1), color: getPriorityColor(formData.priority), mt: 0.5 }}
-                                  />
-                                </Grid>
-                              </Grid>
-                              <Divider sx={{ my: 2 }} />
-                              <Typography variant="subtitle2" gutterBottom>Attendees</Typography>
-                              <Stack direction="row" flexWrap="wrap" gap={1} sx={{ mb: 2 }}>
-                                {formData.selectedUsers.map(user => (
-                                  <Chip key={user._id} label={`${user.firstName} ${user.lastName}`} size="small" variant="outlined" />
-                                ))}
-                                {formData.selectedDepartments.map(deptId => {
-                                  const dept = departments.find(d => d._id === deptId);
-                                  return <Chip key={deptId} label={`${dept?.name} (Department)`} size="small" variant="outlined" color="primary" />;
-                                })}
-                                {formData.selectedUsers.length === 0 && formData.selectedDepartments.length === 0 && (
-                                  <Typography variant="body2" color="error">No attendees selected!</Typography>
-                                )}
-                              </Stack>
-                              {formData.agenda.length > 0 && (
-                                <>
-                                  <Divider sx={{ my: 2 }} />
-                                  <Typography variant="subtitle2" gutterBottom>Agenda ({formData.agenda.length} items)</Typography>
-                                  {formData.agenda.map((item, idx) => (
-                                    <Box key={idx} sx={{ mb: 1, pl: 2, borderLeft: `2px solid ${theme.palette.primary.main}` }}>
-                                      <Typography variant="body2" fontWeight="500">{item.title || 'Untitled'}</Typography>
-                                      {item.description && <Typography variant="caption" color="text.secondary">{item.description}</Typography>}
-                                      <Typography variant="caption" color="text.secondary">Duration: {item.duration} min</Typography>
-                                    </Box>
-                                  ))}
-                                </>
-                              )}
-                            </Paper>
-                            {(!formData.selectedUsers.length && !formData.selectedDepartments.length) && (
-                              <Alert severity="error">At least one attendee or department is required to schedule the meeting.</Alert>
-                            )}
-                            {venueAvailability && !venueAvailability.available && (
-                              <Alert severity="error">Selected venue is not available for this time slot.</Alert>
-                            )}
-                          </Stack>
-                        )}
-
-                        {/* Navigation Buttons */}
-                        <Box sx={{ mt: 4, display: 'flex', justifyContent: 'space-between' }}>
-                          <Button
-                            disabled={activeStep === 0}
-                            onClick={handleBack}
-                            variant="outlined"
-                            sx={{ borderRadius: 2 }}
-                          >
-                            Back
-                          </Button>
-                          {activeStep === steps.length - 1 ? (
-                            <Button
-                              variant="contained"
-                              onClick={handleSubmit}
-                              disabled={saving || (!formData.selectedUsers.length && !formData.selectedDepartments.length) || (venueAvailability && !venueAvailability.available)}
-                              sx={{
-                                background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
-                                borderRadius: 2,
-                                px: 4,
-                                '&:hover': {
-                                  background: `linear-gradient(135deg, ${theme.palette.secondary.main}, ${theme.palette.primary.main})`,
-                                }
-                              }}
-                            >
-                              {saving ? (
-                                <>
-                                  <CircularProgress size={20} sx={{ mr: 1 }} color="inherit" />
-                                  {isEditMode ? 'Updating...' : 'Creating...'}
-                                </>
-                              ) : (
-                                <>
-                                  {isEditMode ? 'Update Meeting' : 'Schedule Meeting'}
-                                  <Send sx={{ ml: 1, fontSize: 18 }} />
-                                </>
-                              )}
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="contained"
-                              onClick={handleNext}
-                              disabled={!isStepValid()}
-                              sx={{
-                                background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
-                                borderRadius: 2,
-                                px: 4
-                              }}
-                            >
-                              Next
-                              <ArrowForward sx={{ ml: 1, fontSize: 18 }} />
-                            </Button>
-                          )}
+                <TextField
+                  fullWidth
+                  placeholder="Search by name, email, or faculty ID..."
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <Search />
+                      </InputAdornment>
+                    ),
+                  }}
+                  sx={{ mb: 2 }}
+                />
+                
+                {searchResults.length > 0 && (
+                  <Paper variant="outlined" sx={{ maxHeight: 200, overflow: 'auto', mb: 2 }}>
+                    {searchResults.map(user => (
+                      <Box
+                        key={user._id}
+                        sx={{ 
+                          p: 2, 
+                          cursor: 'pointer',
+                          '&:hover': { bgcolor: 'action.hover' },
+                          borderBottom: '1px solid',
+                          borderColor: 'divider',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 2
+                        }}
+                        onClick={() => addUserToMeeting(user)}
+                      >
+                        <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main' }}>
+                          {user.firstName?.[0]}
+                        </Avatar>
+                        <Box>
+                          <Typography variant="body2" fontWeight="500">
+                            {user.firstName} {user.lastName}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {user.facultyId} • {user.department?.name}
+                          </Typography>
                         </Box>
                       </Box>
-                    </motion.div>
-                  </StepContent>
-                </Step>
-              ))}
-            </Stepper>
-          </Paper>
-        </motion.div>
-      </Container>
+                    ))}
+                  </Paper>
+                )}
+
+                {formData.selectedUsers.length > 0 && (
+                  <Box>
+                    <Typography variant="caption" color="text.secondary" gutterBottom display="block">
+                      Selected users ({formData.selectedUsers.length})
+                    </Typography>
+                    <Stack direction="row" flexWrap="wrap" gap={1}>
+                      {formData.selectedUsers.map(user => (
+                        <Chip
+                          key={user._id}
+                          avatar={<Avatar>{user.firstName?.[0]}</Avatar>}
+                          label={`${user.firstName} ${user.lastName} (${user.facultyId})`}
+                          onDelete={() => removeUser(user._id)}
+                          variant="outlined"
+                        />
+                      ))}
+                    </Stack>
+                  </Box>
+                )}
+
+                <Divider sx={{ my: 2 }} />
+
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  Or add entire departments
+                </Typography>
+                <FormControl fullWidth sx={{ mt: 1 }}>
+                  <Select
+                    multiple
+                    value={formData.selectedDepartments}
+                    onChange={(e) => setFormData({ ...formData, selectedDepartments: e.target.value })}
+                    displayEmpty
+                    startAdornment={
+                      <InputAdornment position="start">
+                        <Business />
+                      </InputAdornment>
+                    }
+                    renderValue={(selected) => {
+                      if (selected.length === 0) return <em>Select departments</em>;
+                      return `${selected.length} department(s) selected`;
+                    }}
+                  >
+                    {departments.map(dept => (
+                      <MenuItem key={dept._id} value={dept._id}>
+                        {dept.name} ({dept.code})
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Box>
+            </Card>
+
+            {/* Agenda */}
+            <Card>
+              <Box sx={{ p: 3 }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+                  <Box>
+                    <Typography variant="subtitle2" color="text.secondary">
+                      Agenda items (optional)
+                    </Typography>
+                  </Box>
+                  <Button
+                    startIcon={<Add />}
+                    onClick={addAgendaItem}
+                    variant="outlined"
+                    size="small"
+                  >
+                    Add item
+                  </Button>
+                </Stack>
+
+                <Stack spacing={2}>
+                  {formData.agenda.map((item, index) => (
+                    <Paper key={index} variant="outlined" sx={{ p: 2 }}>
+                      <Grid container spacing={2}>
+                        <Grid item xs={12} sm={5}>
+                          <TextField
+                            placeholder="Agenda title"
+                            value={item.title}
+                            onChange={(e) => updateAgendaItem(index, 'title', e.target.value)}
+                            fullWidth
+                            size="small"
+                          />
+                        </Grid>
+                        <Grid item xs={12} sm={5}>
+                          <TextField
+                            placeholder="Description"
+                            value={item.description}
+                            onChange={(e) => updateAgendaItem(index, 'description', e.target.value)}
+                            fullWidth
+                            size="small"
+                          />
+                        </Grid>
+                        <Grid item xs={10} sm={1}>
+                          <TextField
+                            placeholder="Min"
+                            type="number"
+                            value={item.duration}
+                            onChange={(e) => updateAgendaItem(index, 'duration', parseInt(e.target.value))}
+                            fullWidth
+                            size="small"
+                            inputProps={{ min: 5 }}
+                          />
+                        </Grid>
+                        <Grid item xs={2} sm={1}>
+                          <IconButton color="error" onClick={() => removeAgendaItem(index)} size="small">
+                            <Delete />
+                          </IconButton>
+                        </Grid>
+                      </Grid>
+                    </Paper>
+                  ))}
+                </Stack>
+              </Box>
+            </Card>
+
+            {/* Submit Buttons */}
+            <Stack direction="row" spacing={2} justifyContent="flex-end">
+              <Button
+                variant="outlined"
+                onClick={() => navigate('/')}
+                disabled={saving}
+                size="large"
+              >
+                Cancel
+              </Button>
+              
+              <Button
+                type="submit"
+                variant="contained"
+                size="large"
+                disabled={saving || (venueAvailability && !venueAvailability.available)}
+                sx={{
+                  minWidth: 160,
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  '&:hover': {
+                    background: 'linear-gradient(135deg, #764ba2 0%, #667eea 100%)',
+                  }
+                }}
+              >
+                {saving ? (
+                  <>
+                    <CircularProgress size={20} sx={{ mr: 1 }} color="inherit" />
+                    {isEditMode ? 'Updating...' : 'Creating...'}
+                  </>
+                ) : (
+                  isEditMode ? 'Update Meeting' : 'Schedule Meeting'
+                )}
+              </Button>
+            </Stack>
+          </Stack>
+        </form>
+      </Box>
     </Box>
   );
 }

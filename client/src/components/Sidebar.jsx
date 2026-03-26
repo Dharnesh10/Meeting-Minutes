@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
 import {
   Home,
-  Logout,
+  LogOut,
   CheckSquare,
   Ban,
   Calendar,
@@ -220,7 +220,7 @@ export default function Sidebar({ open, setOpen }) {
             hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400`}
         >
           <div className={`min-w-[40px] ${isOpen || isMobileDevice ? '' : 'mx-auto'}`}>
-            <Logout size={20} />
+            <LogOut size={20} />
           </div>
           {(isOpen || isMobileDevice) && (
             <span className="text-sm font-medium">Logout</span>

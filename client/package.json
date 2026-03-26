@@ -23,6 +23,7 @@
     "bootstrap": "^5.3.8",
     "date-fns": "^2.30.0",
     "dayjs": "^1.11.19",
+    "framer-motion": "^12.38.0",
     "gapi-script": "^1.2.0",
     "jwt-decode": "^4.0.0",
     "lucide-react": "^1.7.0",
